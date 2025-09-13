@@ -1,0 +1,7 @@
+PyQt5
+requests
+mitmproxy
+psutil
+requests[socks]
+curl_cffi
+beautifulsoup4
