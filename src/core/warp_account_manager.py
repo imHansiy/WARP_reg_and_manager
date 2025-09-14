@@ -1731,6 +1731,9 @@ class MainWindow(QMainWindow):
                 os.remove(ban_notification_file)
                 print("Ban notification file deleted")
 
+        except KeyboardInterrupt:
+            # Silently handle keyboard interrupt during shutdown
+            raise
         except Exception as e:
             # Continue silently on error (normal if file doesn't exist)
             pass

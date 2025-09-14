@@ -184,6 +184,9 @@ class CertificateManager:
                 if result_system.returncode == 0:
                     print(_('cert_installed_success'))
                     return True
+                elif "already in" in result_system.stderr:
+                    print("✅ Certificate already installed in system keychain")
+                    return True
                 else:
                     print(f"System keychain failed: {result_system.stderr}")
                 
@@ -195,7 +198,12 @@ class CertificateManager:
                 cmd_add = ["security", "add-cert", "-k", user_keychain, cert_path]
                 result_add = subprocess.run(cmd_add, capture_output=True, text=True)
                 
-                if result_add.returncode == 0:
+                # Check if certificate is already installed (this is actually success)
+                if result_add.returncode == 0 or "already in" in result_add.stderr:
+                    if "already in" in result_add.stderr:
+                        print("✅ Certificate already installed in login keychain")
+                        return True
+                    
                     # Then set trust policy explicitly
                     cmd_trust = [
                         "security", "add-trusted-cert",

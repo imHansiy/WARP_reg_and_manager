@@ -1,0 +1,14 @@
+[project]
+name = "warp1"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "beautifulsoup4>=4.13.5",
+    "curl-cffi>=0.13.0",
+    "mitmproxy>=11.0.2",
+    "psutil>=7.0.0",
+    "pyqt5>=5.15.11",
+    "requests[socks]>=2.32.5",
+]

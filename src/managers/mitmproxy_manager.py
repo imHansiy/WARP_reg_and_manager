@@ -13,20 +13,43 @@ import socket
 import psutil
 import logging
 from PyQt5.QtWidgets import QDialog
+from PyQt5.QtCore import pyqtSignal, QObject, Qt, QMetaObject, Q_ARG
 from src.managers.certificate_manager import CertificateManager, ManualCertificateDialog
-from src.config.languages import _
+# from src.config.languages import _  # Удаляем импорт, если есть
 
 
-class MitmProxyManager:
+class MitmProxyManager(QObject):
     """Mitmproxy process manager"""
 
+    show_manual_cert_dialog_signal = pyqtSignal(object)
+    status_message_signal = pyqtSignal(str, int)  # message, timeout
+
     def __init__(self):
+        super().__init__()
         self.process = None
         self.port = 8080  # Original port
         self.script_path = "src/proxy/warp_proxy_script.py"  # Use actual script
         self.debug_mode = True
         self.cert_manager = CertificateManager()
         self._terminal_opened = False  # Track if terminal window was opened
+        self.show_manual_cert_dialog_signal.connect(self._show_manual_certificate_dialog_main_thread)
+    
+    def find_free_port(self, start_port=8080, max_attempts=10):
+        """Find a free port starting from start_port"""
+        for port in range(start_port, start_port + max_attempts):
+            if self.is_port_available(port):
+                return port
+        return None
+    
+    def is_port_available(self, port):
+        """Check if port is available for binding"""
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                s.bind(('127.0.0.1', port))
+                return True
+        except OSError:
+            return False
 
     def start(self, parent_window=None):
         """Start Mitmproxy"""
@@ -38,17 +61,36 @@ class MitmProxyManager:
             # First, check if mitmproxy is properly installed
             if not self.check_mitmproxy_installation():
                 logging.error("Mitmproxy installation check failed")
+                if parent_window:
+                    parent_window.status_bar.showMessage("Mitmproxy installation check failed", 8000)
                 return False
+            
+            # Check if default port is available, if not find a free one
+            if not self.is_port_available(self.port):
+                print(f"⚠️ Port {self.port} is already in use, searching for a free port...")
+                free_port = self.find_free_port(self.port, 20)
+                if free_port:
+                    old_port = self.port
+                    self.port = free_port
+                    print(f"🔄 Using port {self.port} instead of {old_port}")
+                    if parent_window:
+                        parent_window.status_bar.showMessage(f"Port {old_port} busy, using port {self.port}", 3000)
+                else:
+                    error_msg = f"No free ports available (tried {self.port}-{self.port+19})"
+                    print(f"❌ {error_msg}")
+                    if parent_window:
+                        parent_window.status_bar.showMessage(error_msg, 5000)
+                    return False
 
             # On first run, perform certificate check
             if not self.cert_manager.check_certificate_exists():
-                logging.info(_('cert_creating'))
+                logging.info("Certificate creation completed")
 
                 # Run short mitmproxy to create certificate
                 temp_cmd = ["mitmdump", "--set", "confdir=~/.mitmproxy", "-q"]
                 try:
                     if parent_window:
-                        parent_window.status_bar.showMessage(_('cert_creating'), 0)
+                        parent_window.status_bar.showMessage("Certificate creation in progress", 0)
 
                     # Platform-specific process creation
                     if sys.platform == "win32":
@@ -71,20 +113,20 @@ class MitmProxyManager:
                 # Check if certificate was created
                 if not self.cert_manager.check_certificate_exists():
                     if parent_window:
-                        parent_window.status_bar.showMessage(_('cert_creation_failed'), 5000)
+                        parent_window.status_bar.showMessage("Certificate creation failed", 5000)
                     return False
                 else:
-                    logging.info(_('cert_created_success'))
+                    logging.info("Certificate created successfully")
 
             # Automatic certificate installation
             if parent_window and not parent_window.account_manager.is_certificate_approved():
-                logging.info(_('cert_installing'))
+                logging.info("Certificate installation in progress")
 
                 # Install certificate automatically
                 if self.cert_manager.install_certificate_automatically():
                     # If certificate successfully installed, save approval
                     parent_window.account_manager.set_certificate_approved(True)
-                    parent_window.status_bar.showMessage(_('cert_installed_success'), 3000)
+                    parent_window.status_bar.showMessage("Certificate installed successfully", 3000)
                     
                     # On macOS additionally check certificate trust
                     if sys.platform == "darwin":
@@ -92,13 +134,14 @@ class MitmProxyManager:
                             logging.warning("Certificate may not be fully trusted. Manual verification recommended.")
                             parent_window.status_bar.showMessage("Certificate installed but may need manual trust setup", 5000)
                 else:
-                    # Automatic installation failed - show manual installation dialog
-                    dialog_result = self.show_manual_certificate_dialog(parent_window)
-                    if dialog_result:
-                        # User said installation completed
-                        parent_window.account_manager.set_certificate_approved(True)
-                    else:
-                        return False
+                    # Automatic installation failed - show manual installation dialog через сигнал
+                    QMetaObject.invokeMethod(
+                        self,
+                        "show_manual_cert_dialog_signal",
+                        Qt.QueuedConnection,
+                        Q_ARG(object, parent_window)
+                    )
+                    return False
 
             # Prepare mitmproxy command - platform-specific with enhanced Windows support
             if sys.platform.startswith('linux'):
@@ -128,7 +171,7 @@ class MitmProxyManager:
                     "--set", "connection_strategy=lazy",  # Windows: improve connection handling
                     "--set", "stream_large_bodies=1m",  # Windows: handle large responses
                     "--set", "body_size_limit=10m",  # Windows: increase body size limit
-                    "--ignore-hosts", "^(?!.*app\.warp\.dev).*$",  # Only intercept Warp domains
+                    "--ignore-hosts", "^(?!.*app\\.warp\\.dev).*$",  # Only intercept Warp domains
                 ]
                 logging.info("Windows Mitmproxy command with enhanced Windows-specific parameters")
             else:
@@ -143,6 +186,7 @@ class MitmProxyManager:
                 ]
 
             logging.info(f"Mitmproxy command: {' '.join(cmd)}")
+            print(f"Mitmproxy command: {' '.join(cmd)}")
 
             # Start process - platform-specific console handling with Windows enhancements
             if sys.platform == "win32":
@@ -322,6 +366,7 @@ class MitmProxyManager:
                                 time.sleep(1)
                                 if self.is_port_open("127.0.0.1", self.port):
                                     logging.info(f"Linux: Port {self.port} successfully opened")
+                                    print(f"✅ mitmdump успешно стартовал, порт {self.port} открыт.")
                                 else:
                                     logging.warning(f"Linux: Port {self.port} not responding - additional check...")
                                     time.sleep(3)
@@ -329,10 +374,39 @@ class MitmProxyManager:
                                         logging.error("Linux: Failed to open port")
                                         return False
                                         
-                            elif sys.platform == "darwin" and self.debug_mode:
-                                logging.debug("Running TLS diagnosis (macOS debug mode)...")
+                            elif sys.platform == "darwin":
+                                # macOS: Check port properly
+                                logging.debug("macOS: Checking port and process status...")
                                 time.sleep(1)
-                                self.diagnose_tls_issues()
+                                
+                                # Check port for up to 10 seconds
+                                for i in range(10):
+                                    time.sleep(0.5)
+                                    if self.is_port_open("127.0.0.1", self.port):
+                                        logging.info(f"macOS: Port {self.port} successfully opened")
+                                        print(f"✅ mitmdump успешно стартовал, порт {self.port} открыт.")
+                                        break
+                                else:
+                                    # Port didn't open, check for errors
+                                    try:
+                                        stdout, stderr = self.process.communicate(timeout=2)
+                                        print(f"[mitmdump stdout]:\n{stdout}")
+                                        print(f"[mitmdump stderr]:\n{stderr}")
+                                        
+                                        # Check for port binding error specifically
+                                        if "address already in use" in stderr or "bind on address" in stderr:
+                                            error_msg = f"Port {self.port} is still in use. Try restarting the application."
+                                            print(f"❌ {error_msg}")
+                                        else:
+                                            logging.error(f"macOS: Failed to open port {self.port}")
+                                        return False
+                                    except subprocess.TimeoutExpired:
+                                        logging.error(f"macOS: Process communication timeout, port {self.port} not responding")
+                                        return False
+                                
+                                if self.debug_mode:
+                                    logging.debug("Running TLS diagnosis (macOS debug mode)...")
+                                    self.diagnose_tls_issues()
                             
                             return True
                         else:
@@ -540,13 +614,9 @@ class MitmProxyManager:
             return False
 
     def show_manual_certificate_dialog(self, parent_window):
-        """Show manual certificate installation dialog"""
-        try:
-            dialog = ManualCertificateDialog(self.cert_manager.get_certificate_path(), parent_window)
-            return dialog.exec_() == QDialog.Accepted
-        except Exception as e:
-            logging.error(f"Manual certificate dialog error: {e}")
-            return False
+        """Show manual certificate installation dialog (deprecated, use signal)"""
+        # Оставлено для обратной совместимости, но не использовать напрямую
+        return self._show_manual_certificate_dialog_main_thread(parent_window)
     
     def _test_windows_proxy_connection(self):
         """Test Windows proxy connection functionality"""
@@ -574,4 +644,13 @@ class MitmProxyManager:
                 
         except Exception as e:
             logging.warning(f"Windows proxy connection test failed: {e}")
+            return False
+
+    def _show_manual_certificate_dialog_main_thread(self, parent_window):
+        """Show manual certificate installation dialog in the main thread"""
+        try:
+            dialog = ManualCertificateDialog(self.cert_manager.get_certificate_path(), parent_window)
+            return dialog.exec_() == QDialog.Accepted
+        except Exception as e:
+            logging.error(f"Manual certificate dialog error in main thread: {e}")
             return False
