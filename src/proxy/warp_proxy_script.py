@@ -15,20 +15,22 @@ import string
 from mitmproxy import http
 from mitmproxy.script import concurrent
 
-# Add src to path for imports (mitmproxy runs from project root)
-import sys
-import os
-project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, os.path.join(project_root, 'src'))
-
+# Try to import languages module - use fallback if not available
 try:
-    from config.languages import get_language_manager, _
+    from src.config.languages import get_language_manager, _
 except ImportError:
-    # Fallback if languages module is not available
-    def get_language_manager():
-        return None
-    def _(key):
-        return key
+    try:
+        # Fallback for when running from project root
+        import sys
+        import os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+        from src.config.languages import get_language_manager, _
+    except ImportError:
+        # Final fallback if languages module is not available
+        def get_language_manager():
+            return None
+        def _(key):
+            return key
 
 # Hide SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -353,7 +355,6 @@ def is_relevant_request(flow: http.HTTPFlow) -> bool:
 
     return True
 
-@concurrent
 def request(flow: http.HTTPFlow) -> None:
     """Executed when request is intercepted"""
 
@@ -448,7 +449,6 @@ def responseheaders(flow: http.HTTPFlow) -> None:
     else:
         flow.response.stream = False
 
-@concurrent
 def response(flow: http.HTTPFlow) -> None:
     """Executed when response is received"""
 
@@ -492,13 +492,12 @@ def response(flow: http.HTTPFlow) -> None:
 
     # 403 error in /ai/multi-agent endpoint - immediate account ban
     if "/ai/multi-agent" in flow.request.path and flow.response.status_code == 403:
-        print("⚠️ 403 FORBIDDEN - Access error received!")
+        print("⛔ 403 FORBIDDEN - Account ban detected!")
         if handler.active_email:
-            print(f"⚠️ Problematic account: {handler.active_email}")
-            print("⛔ 403 error detected - marking account as banned immediately!")
+            print(f"Banned account: {handler.active_email}")
             handler.mark_account_as_banned(handler.active_email)
         else:
-            print("⚠️ Active account not found, ban not marked")
+            print("Active account not found, ban not marked")
 
     # If 401 error received, try to refresh token
     if flow.response.status_code == 401:

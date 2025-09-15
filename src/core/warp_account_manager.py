@@ -28,15 +28,13 @@ from src.ui.ui_dialogs import AddAccountDialog
 from src.utils.utils import load_stylesheet, get_os_info, is_port_open
 from src.utils.account_processor import AccountProcessor
 
-# Platform-specific imports
+# Platform-specific proxy imports
 if sys.platform == "win32":
-    import winreg
+    from src.proxy.proxy_windows import WindowsProxyManager
 elif sys.platform == "darwin":
-    # macOS - no winreg needed
-    winreg = None
+    from src.proxy.proxy_macos import MacOSProxyManager
 else:
-    # Linux or other platforms
-    winreg = None
+    from src.proxy.proxy_linux import LinuxProxyManager
 
 # Disable SSL warnings (when using mitmproxy)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -90,14 +88,6 @@ class ProxyConfigWorker(QThread):
     def run(self):
         try:
             success = ProxyManager.set_proxy(self.proxy_url)
-            
-            # Windows-specific enhancements
-            if success and sys.platform == "win32":
-                from src.proxy.proxy_windows import WindowsProxyManager
-                # Force proxy refresh for better compatibility
-                WindowsProxyManager.force_proxy_refresh()
-                time.sleep(1)  # Give Windows time to apply settings
-                
             self.config_completed.emit(success)
         except Exception as e:
             print(f"Proxy config error: {e}")
@@ -1135,34 +1125,18 @@ class MainWindow(QMainWindow):
         self.token_worker = None
 
     def _complete_account_activation(self, email):
-        """Complete account activation"""
+        """Simple account activation like old version"""
         try:
             if self.account_manager.set_active_account(email):
                 self.load_accounts(preserve_limits=True)
-                self.status_bar.showMessage(_('account_activated').format(email), 3000)
+                self.status_bar.showMessage(f"Account activated: {email}", 3000)
+                # Simple notification to proxy script
                 self.notify_proxy_active_account_change()
-
-                # Check user_settings.json file and make API request if necessary
-                self.check_and_fetch_user_settings(email)
             else:
-                self.status_bar.showMessage(_('account_activation_failed'), 3000)
+                self.status_bar.showMessage("Account activation failed", 3000)
         except Exception as e:
-            self.status_bar.showMessage(_('account_activation_error').format(str(e)), 5000)
+            self.status_bar.showMessage(f"Account activation error: {str(e)}", 5000)
 
-    def check_and_fetch_user_settings(self, email):
-        """Check user_settings.json file and make API request if necessary"""
-        try:
-            import os
-            user_settings_path = "user_settings.json"
-
-            # Check if file exists
-            if not os.path.exists(user_settings_path):
-                print(f"🔍 user_settings.json file not found, making API request for {email}...")
-                self.fetch_and_save_user_settings(email)
-            else:
-                print(f"✅ user_settings.json file exists, API request skipped")
-        except Exception as e:
-            print(f"user_settings control error: {e}")
 
     def fetch_and_save_user_settings(self, email):
         """Make GetUpdatedCloudObjects API request and save as user_settings.json"""

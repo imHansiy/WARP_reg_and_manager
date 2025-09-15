@@ -49,10 +49,6 @@ Install all at once:
 pip install -r requirements.txt
 ```
 
-## Troubleshooting
-
-### Common Issues
-
 **Python not found:**
 ```bash
 # Linux/macOS
@@ -69,7 +65,7 @@ brew install python3                  # macOS with Homebrew
 sudo apt install python3-pyqt5 python3-pyqt5.qtwidgets
 
 # Then install other dependencies
-pip install requests mitmproxy psutil "requests[socks]"
+pip install -r requirements.txt
 ```
 
 **Permission issues (Windows):**
