@@ -12,7 +12,7 @@ import time
 import socket
 import psutil
 import logging
-from PyQt5.QtWidgets import QDialog
+from PyQt5.QtWidgets import QDialog, QMessageBox
 from src.managers.certificate_manager import CertificateManager, ManualCertificateDialog
 from src.config.languages import _
 
@@ -23,8 +23,10 @@ class MitmProxyManager:
     def __init__(self):
         self.process = None
         self.port = 8080  # Original port
-        self.script_path = "src/proxy/warp_proxy_script.py"  # Use actual script
-        self.debug_mode = True
+        # Use warp_proxy_script.py from src/proxy directory (correct modular structure)
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        self.script_path = os.path.join(project_root, "src", "proxy", "warp_proxy_script.py")
+        self.debug_mode = True  # Always debug mode for simplicity
         self.cert_manager = CertificateManager()
         self._terminal_opened = False  # Track if terminal window was opened
 
@@ -85,6 +87,23 @@ class MitmProxyManager:
                     # If certificate successfully installed, save approval
                     parent_window.account_manager.set_certificate_approved(True)
                     parent_window.status_bar.showMessage(_('cert_installed_success'), 3000)
+
+                    # Windows: warn if installed only for CurrentUser
+                    if sys.platform == "win32":
+                        try:
+                            in_machine = self.cert_manager._is_cert_installed_in_store_windows("machine")
+                            in_user = self.cert_manager._is_cert_installed_in_store_windows("user")
+                            if in_user and not in_machine:
+                                QMessageBox.warning(
+                                    parent_window,
+                                    "Certificate scope warning",
+                                    "mitmproxy CA установлен только в CurrentUser\\Root.\n\n"
+                                    "Для лучшей совместимости запустите приложение от имени администратора, "
+                                    "чтобы установить сертификат в LocalMachine\\Root.",
+                                    QMessageBox.Ok
+                                )
+                        except Exception:
+                            pass
                     
                     # On macOS additionally check certificate trust
                     if sys.platform == "darwin":
@@ -100,259 +119,112 @@ class MitmProxyManager:
                     else:
                         return False
 
-            # Prepare mitmproxy command - platform-specific with enhanced Windows support
-            if sys.platform.startswith('linux'):
-                # Linux-specific configuration
-                cmd = [
-                    "mitmdump",
-                    "--listen-host", "127.0.0.1",
-                    "-p", str(self.port),
-                    "-s", self.script_path,
-                    "--set", "confdir=~/.mitmproxy",
-                    "--set", "keep_host_header=true",
-                    "--set", "ssl_insecure=true",  # Linux: bypass SSL verification issues
-                    "--set", "upstream_cert=false",  # Linux: improve compatibility
-                ]
-                logging.info("Linux Mitmproxy command with additional SSL parameters")
-            elif sys.platform == "win32":
-                # Enhanced Windows configuration for better interception
-                cmd = [
-                    "mitmdump",
-                    "--listen-host", "0.0.0.0",  # Listen on all interfaces for Windows
-                    "-p", str(self.port),
-                    "-s", self.script_path,
-                    "--set", "confdir=~/.mitmproxy",
-                    "--set", "keep_host_header=true",
-                    "--set", "ssl_insecure=true",  # Windows: bypass SSL verification
-                    "--set", "upstream_cert=false",  # Windows: improve compatibility
-                    "--set", "connection_strategy=lazy",  # Windows: improve connection handling
-                    "--set", "stream_large_bodies=1m",  # Windows: handle large responses
-                    "--set", "body_size_limit=10m",  # Windows: increase body size limit
-                    "--ignore-hosts", "^(?!.*app\.warp\.dev).*$",  # Only intercept Warp domains
-                ]
-                logging.info("Windows Mitmproxy command with enhanced Windows-specific parameters")
-            else:
-                # macOS configuration
-                cmd = [
-                    "mitmdump",
-                    "--listen-host", "127.0.0.1",  # Listen on IPv4
-                    "-p", str(self.port),
-                    "-s", self.script_path,
-                    "--set", "confdir=~/.mitmproxy",
-                    "--set", "keep_host_header=true",    # Keep host header
-                ]
+            # Mitmproxy command exactly like old version
+            cmd = [
+                "mitmdump",
+                "--listen-host", "127.0.0.1",  # IPv4 listen
+                "-p", str(self.port),
+                "-s", self.script_path,
+                "--set", "confdir=~/.mitmproxy",
+                "--set", "keep_host_header=true",    # Keep host header
+                # Be conservative with protocols to avoid handshake bugs
+                "--set", "http2=false",
+                # Avoid TLS interception for known pinned/Google endpoints to prevent resets
+                "--ignore-hosts", r"^(?:[a-zA-Z0-9-]+\.)?googleapis\.com$",
+                "--ignore-hosts", r"^(?:[a-zA-Z0-9-]+\.)?gstatic\.com$",
+                "--ignore-hosts", r"^(?:[a-zA-Z0-9-]+\.)?google\.com$",
+            ]
 
-            logging.info(f"Mitmproxy command: {' '.join(cmd)}")
+            print(f"Mitmproxy command: {' '.join(cmd)}")
 
-            # Start process - platform-specific console handling with Windows enhancements
+            # Start process - platform-specific console handling like old version
             if sys.platform == "win32":
                 cmd_str = ' '.join(f'"{arg}"' if ' ' in arg else arg for arg in cmd)
 
                 if self.debug_mode:
-                    # Debug mode: Console window visible with enhanced Windows settings
-                    logging.info("Windows Debug mode active - Mitmproxy console window will open")
-                    logging.info("Enhanced Windows proxy interception enabled")
-                    
-                    # Use enhanced Windows command prompt with UTF-8 support
+                    # Debug mode: Console window visible
+                    print("Debug mode active - Mitmproxy console window will open")
                     self.process = subprocess.Popen(
-                        f'start "Mitmproxy Console (Debug) - Enhanced Windows Mode" cmd /k "chcp 65001 && {cmd_str}"',
+                        f'start "Mitmproxy Console (Debug)" cmd /k "{cmd_str}"',
                         shell=True
                     )
                 else:
-                    # Normal mode: Hidden console window with Windows optimizations
-                    logging.info("Windows Normal mode - Mitmproxy will run in background with enhanced settings")
-                    
-                    # Set Windows-specific environment variables for better performance
-                    env = os.environ.copy()
-                    env['PYTHONUNBUFFERED'] = '1'  # Force unbuffered output
-                    env['MITMPROXY_CERT_DIR'] = os.path.expanduser('~/.mitmproxy')
-                    env['PYTHONIOENCODING'] = 'utf-8'  # Handle Unicode properly
-                    
+                    # Normal mode: Hidden console window
+                    print("Normal mode - Mitmproxy will run in background")
                     self.process = subprocess.Popen(
                         cmd_str,
                         shell=True,
-                        creationflags=subprocess.CREATE_NO_WINDOW,
-                        env=env
+                        creationflags=subprocess.CREATE_NO_WINDOW
                     )
 
-                # Windows enhanced port checking with longer timeout
-                logging.info("Starting Mitmproxy with Windows enhancements, checking port...")
-                for i in range(15):  # Wait 15 seconds (increased for Windows)
+                # Windows start command returns immediately, so check port
+                print("Starting Mitmproxy, checking port...")
+                for i in range(10):  # Wait 10 seconds
                     time.sleep(1)
                     if self.is_port_open("127.0.0.1", self.port):
-                        logging.info(f"Windows: Mitmproxy started successfully - Port {self.port} is open")
-                        
-                        # Additional Windows verification - test proxy connection
-                        time.sleep(2)  # Extra wait for Windows
-                        if self._test_windows_proxy_connection():
-                            logging.info("Windows: Proxy connection test successful")
-                        else:
-                            logging.warning("Windows: Proxy connection test failed - may still work")
-                        
+                        print(f"Mitmproxy started successfully - Port {self.port} is open")
                         return True
-                
-                logging.error("Windows: Failed to start Mitmproxy - port did not open in 15 seconds")
+                    print(f"Checking port... ({i+1}/10)")
+
+                print("Failed to start Mitmproxy - port did not open")
                 return False
             else:
-                # Linux/Mac platform-specific startup
-                if sys.platform.startswith('linux'):
-                    # Linux-specific process configuration
-                    logging.info("Linux: Starting mitmproxy with Linux-specific settings")
-                    
-                    # Set environment variables for Linux
-                    env = os.environ.copy()
-                    env['PYTHONUNBUFFERED'] = '1'  # Force unbuffered output
-                    env['MITMPROXY_CERT_DIR'] = os.path.expanduser('~/.mitmproxy')
-                    
-                    if self.debug_mode:
-                        logging.info("Linux Debug mode: opening terminal window with mitmproxy logs")
-                        
-                        # Try different terminal emulators for Linux (most common first)
-                        terminal_commands = [
-                            # GNOME Terminal
-                            ['gnome-terminal', '--title=Mitmproxy Console (Debug)', '--', 'bash', '-c', 
-                             f"{' '.join(cmd)}; echo '\nℹ️  Mitmproxy finished. Press Enter to close...'; read"],
-                            # KDE Konsole
-                            ['konsole', '--title', 'Mitmproxy Console (Debug)', '-e', 'bash', '-c', 
-                             f"{' '.join(cmd)}; echo '\nℹ️  Mitmproxy finished. Press Enter to close...'; read"],
-                            # XFCE Terminal
-                            ['xfce4-terminal', '--title=Mitmproxy Console (Debug)', '--command', 'bash', '-c', 
-                             f"{' '.join(cmd)}; echo '\nℹ️  Mitmproxy finished. Press Enter to close...'; read"],
-                            # Generic xterm
-                            ['xterm', '-title', 'Mitmproxy Console (Debug)', '-e', 'bash', '-c', 
-                             f"{' '.join(cmd)}; echo '\nℹ️  Mitmproxy finished. Press Enter to close...'; read"],
-                            # Terminator
-                            ['terminator', '--title=Mitmproxy Console (Debug)', '-x', 'bash', '-c', 
-                             f"{' '.join(cmd)}; echo '\nℹ️  Mitmproxy finished. Press Enter to close...'; read"]
-                        ]
-                        
-                        terminal_opened = False
-                        for terminal_cmd in terminal_commands:
-                            try:
-                                # Check if this terminal is available
-                                result = subprocess.run(['which', terminal_cmd[0]], 
-                                                       capture_output=True, timeout=2)
-                                if result.returncode == 0:
-                                    logging.info(f"Linux: Opening {terminal_cmd[0]} window...")
-                                    self.process = subprocess.Popen(terminal_cmd, env=env)
-                                    terminal_opened = True
-                                    self._terminal_opened = True  # Flag for process check
-                                    break
-                            except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-                                continue
-                        
-                        if not terminal_opened:
-                            logging.warning("Linux: No suitable terminal found - running in background")
-                            logging.info("Linux: To display logs install one of:")
-                            logging.info("   sudo apt install gnome-terminal (Ubuntu/GNOME)")
-                            logging.info("   sudo apt install konsole (KDE)")
-                            logging.info("   sudo apt install xfce4-terminal (XFCE)")
-                            logging.info("   sudo apt install xterm (Universal)")
-                            self._terminal_opened = False  # Reset flag for background mode
-                            self.process = subprocess.Popen(
-                                cmd, 
-                                stdout=subprocess.PIPE, 
-                                stderr=subprocess.STDOUT,
-                                text=True, 
-                                env=env,
-                                bufsize=1,
-                                universal_newlines=True
-                            )
-                    else:
-                        logging.info("Linux Normal mode: mitmproxy in background")
-                        self._terminal_opened = False  # Reset flag for background mode
-                        self.process = subprocess.Popen(
-                            cmd, 
-                            stdout=subprocess.DEVNULL, 
-                            stderr=subprocess.PIPE, 
-                            text=True, 
-                            env=env
-                        )
-                        
-                elif sys.platform == "darwin":
-                    # macOS-specific configuration
-                    if self.debug_mode:
-                        logging.info("macOS Debug mode: Mitmproxy will run in foreground")
-                        logging.info("TLS issues? Run diagnosis with: proxy_manager.diagnose_tls_issues()")
-                        self.process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                    else:
-                        logging.info("macOS Normal mode: Mitmproxy will run in background")
-                        self.process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                # Linux/Mac normal startup
+                if self.debug_mode:
+                    logging.info("Debug mode active - Mitmproxy will run in foreground")
+                    logging.info("TLS issues? Run diagnosis with: proxy_manager.diagnose_tls_issues()")
+                    # On macOS/Linux, run in foreground for debug mode
+                    self.process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                 else:
-                    # Fallback for other Unix-like systems
-                    if self.debug_mode:
-                        logging.info("Debug mode active - Mitmproxy will run in foreground")
-                        logging.info("TLS issues? Run diagnosis with: proxy_manager.diagnose_tls_issues()")
-                        self.process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                    else:
-                        logging.info("Normal mode - Mitmproxy will run in background")
-                        self.process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                    logging.info("Normal mode - Mitmproxy will run in background")
+                    # Run in background but capture errors for diagnosis
+                    self.process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                     
                 # Wait a bit and check if process is still running
-                if sys.platform == "win32":
-                    # Windows logic - already handled above
-                    pass
+                time.sleep(2)
+                
+                if self.process and self.process.poll() is None:
+                    logging.info(f"Mitmproxy started successfully (PID: {self.process.pid})")
+                    
+                    # On macOS, proactively check for TLS issues if in debug mode
+                    if sys.platform == "darwin" and self.debug_mode:
+                        logging.info("Running TLS diagnosis (macOS debug mode)...")
+                        time.sleep(1)  # Give mitmproxy time to start
+                        self.diagnose_tls_issues()
+                    
+                    return True
                 else:
-                    # For Linux/macOS, handle terminal vs background differently
-                    if sys.platform.startswith('linux') and self.debug_mode and hasattr(self, '_terminal_opened') and self._terminal_opened:
-                        # Linux debug mode with terminal - process is actually the terminal wrapper
-                        logging.info("Linux Debug: Waiting for startup in opened terminal...")
-                        
-                        # Wait for port to open (terminal process launches mitmproxy inside)
-                        for i in range(10):  # 10 seconds total
-                            time.sleep(1)
-                            if self.is_port_open("127.0.0.1", self.port):
-                                logging.info(f"Linux Debug: Port {self.port} successfully opened in terminal!")
-                                logging.info("Mitmproxy started successfully in terminal window")
-                                return True
+                    # Process terminated, get error output
+                    try:
+                        if self.process:
+                            stdout, stderr = self.process.communicate(timeout=5)
+                            logging.error("Failed to start Mitmproxy - Process terminated")
+                            logging.error("Error Details:")
+                            if stderr:
+                                logging.error(f"STDERR: {stderr.strip()}")
+                            if stdout:
+                                logging.error(f"STDOUT: {stdout.strip()}")
                             
-                        logging.warning("Linux Debug: Failed to open port in terminal")
-                        logging.info("Linux Debug: Check terminal window with mitmproxy logs")
-                        return False
-                    else:
-                        # Standard process check for background mode or macOS
-                        time.sleep(2)
-                        
-                        if self.process.poll() is None:
-                            logging.info(f"Mitmproxy started successfully (PID: {self.process.pid})")
-                            
-                            # Platform-specific post-start checks
-                            if sys.platform.startswith('linux'):
-                                logging.debug("Linux: Checking port and process status...")
-                                time.sleep(1)
-                                if self.is_port_open("127.0.0.1", self.port):
-                                    logging.info(f"Linux: Port {self.port} successfully opened")
-                                else:
-                                    logging.warning(f"Linux: Port {self.port} not responding - additional check...")
-                                    time.sleep(3)
-                                    if not self.is_port_open("127.0.0.1", self.port):
-                                        logging.error("Linux: Failed to open port")
-                                        return False
-                                        
-                            elif sys.platform == "darwin" and self.debug_mode:
-                                logging.debug("Running TLS diagnosis (macOS debug mode)...")
-                                time.sleep(1)
-                                self.diagnose_tls_issues()
-                            
-                            return True
-                        else:
-                            # Process terminated, get error output
-                            try:
-                                stdout, stderr = self.process.communicate(timeout=5)
-                                logging.error("Failed to start Mitmproxy - Process terminated")
-                                logging.error("Error Details:")
-                                if stderr:
-                                    logging.error(f"STDERR: {stderr.strip()}")
-                                if stdout:
-                                    logging.error(f"STDOUT: {stdout.strip()}")
-                                
-                                self._suggest_mitmproxy_solutions(stderr, stdout)
-                            except subprocess.TimeoutExpired:
-                                logging.error("Process communication timeout")
-                            return False
+                            # Common solutions based on error patterns
+                            self._suggest_mitmproxy_solutions(stderr, stdout)
+                    except subprocess.TimeoutExpired:
+                        logging.error("Process communication timeout")
+                    return False
 
         except Exception as e:
             logging.error(f"Mitmproxy start error: {e}")
+            return False
+    
+    def is_port_open(self, host, port):
+        """Check if port is open"""
+        import socket
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1)
+            result = sock.connect_ex((host, port))
+            sock.close()
+            return result == 0
+        except:
             return False
 
     def _suggest_mitmproxy_solutions(self, stderr, stdout):
@@ -528,17 +400,6 @@ class MitmProxyManager:
         
         return True
 
-    def is_port_open(self, host, port):
-        """Check if port is open"""
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(1)
-            result = sock.connect_ex((host, port))
-            sock.close()
-            return result == 0
-        except:
-            return False
-
     def show_manual_certificate_dialog(self, parent_window):
         """Show manual certificate installation dialog"""
         try:
@@ -546,32 +407,4 @@ class MitmProxyManager:
             return dialog.exec_() == QDialog.Accepted
         except Exception as e:
             logging.error(f"Manual certificate dialog error: {e}")
-            return False
-    
-    def _test_windows_proxy_connection(self):
-        """Test Windows proxy connection functionality"""
-        try:
-            import requests
-            
-            # Test simple HTTP request through proxy
-            proxies = {
-                'http': f'http://127.0.0.1:{self.port}',
-                'https': f'http://127.0.0.1:{self.port}'
-            }
-            
-            # Test with a simple HTTP endpoint
-            response = requests.get('http://httpbin.org/ip', 
-                                  proxies=proxies, 
-                                  timeout=5,
-                                  verify=False)
-            
-            if response.status_code == 200:
-                logging.info("Windows proxy connection test successful")
-                return True
-            else:
-                logging.warning(f"Windows proxy test returned status: {response.status_code}")
-                return False
-                
-        except Exception as e:
-            logging.warning(f"Windows proxy connection test failed: {e}")
             return False

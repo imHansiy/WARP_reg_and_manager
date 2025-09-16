@@ -334,6 +334,16 @@ handler = WarpProxyHandler()
 def is_relevant_request(flow: http.HTTPFlow) -> bool:
     """Check if this request is relevant to us"""
 
+    # Skip Google/Firebase endpoints entirely to avoid TLS pinning issues
+    pinned_domains = [
+        "securetoken.googleapis.com",
+        ".googleapis.com",
+        ".gstatic.com",
+        ".google.com",
+    ]
+    if any(d in flow.request.pretty_host for d in pinned_domains):
+        return False
+
     # Check Firebase token refresh requests by User-Agent and exclude them
     if ("securetoken.googleapis.com" in flow.request.pretty_host and
         flow.request.headers.get("User-Agent") == "WarpAccountManager/1.0"):

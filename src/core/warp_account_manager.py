@@ -137,7 +137,7 @@ class ActiveAccountRefreshWorker(QThread):
                 'refresh_token': refresh_token
             }
 
-            response = requests.post(url, json=data, headers=headers, timeout=10)
+            response = requests.post(url, json=data, headers=headers, timeout=10, verify=False)
             if response.status_code == 200:
                 token_data = response.json()
                 new_token_data = {
@@ -184,11 +184,12 @@ class ActiveAccountRefreshWorker(QThread):
             access_token = account_data['stsTokenManager']['accessToken']
             headers = {
                 'Authorization': f'Bearer {access_token}',
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'x-warp-manager-request': 'true'
             }
             
             url = "https://api.cloudflareclient.com/v0a2158/reg"
-            response = requests.get(url, headers=headers, timeout=10)
+            response = requests.get(url, headers=headers, timeout=10, verify=False)
             
             if response.status_code == 200:
                 return response.json()
@@ -1705,9 +1706,6 @@ class MainWindow(QMainWindow):
                 os.remove(ban_notification_file)
                 print("Ban notification file deleted")
 
-        except KeyboardInterrupt:
-            # Silently handle keyboard interrupt during shutdown
-            raise
         except Exception as e:
             # Continue silently on error (normal if file doesn't exist)
             pass

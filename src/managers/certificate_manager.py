@@ -23,6 +23,32 @@ class CertificateManager:
         self.mitmproxy_dir = Path.home() / ".mitmproxy"
         self.cert_file = self.mitmproxy_dir / "mitmproxy-ca-cert.cer"
 
+    def _is_admin_windows(self):
+        """Check if current process has administrative privileges on Windows"""
+        try:
+            if sys.platform != "win32":
+                return False
+            import ctypes
+            return ctypes.windll.shell32.IsUserAnAdmin() != 0
+        except Exception:
+            return False
+
+    def _is_cert_installed_in_store_windows(self, scope: str = "machine"):
+        """Check if mitmproxy cert is installed in a specific Windows store scope.
+        scope: 'machine' -> LocalMachine, 'user' -> CurrentUser
+        """
+        if sys.platform != "win32":
+            return False
+        try:
+            if scope == "user":
+                cmd = ["certutil", "-user", "-store", "root", "mitmproxy"]
+            else:
+                cmd = ["certutil", "-store", "root", "mitmproxy"]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            return result.returncode == 0 and "mitmproxy" in result.stdout.lower()
+        except Exception:
+            return False
+
     def check_certificate_exists(self):
         """Check if certificate file exists"""
         return self.cert_file.exists()
@@ -107,22 +133,24 @@ class CertificateManager:
             return False
 
     def is_certificate_installed_windows(self):
-        """Check if certificate is already installed in Windows certificate store"""
+        """Check if certificate is already installed in Windows certificate store (either scope)"""
         if sys.platform != "win32":
             return False
             
         try:
-            # Check if mitmproxy certificate is already in the trusted root store
-            cmd = ["certutil", "-store", "root", "mitmproxy"]
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-            
-            # If the command succeeds and contains mitmproxy, certificate is installed
-            if result.returncode == 0 and "mitmproxy" in result.stdout.lower():
-                print("✅ Certificate found in Windows certificate store")
-                return True
-            
-            print("ℹ️ Certificate not found in Windows certificate store")
-            return False
+            in_machine = self._is_cert_installed_in_store_windows("machine")
+            in_user = self._is_cert_installed_in_store_windows("user")
+
+            if in_machine:
+                print("✅ Certificate found in LocalMachine\\Root store")
+            if in_user:
+                print("✅ Certificate found in CurrentUser\\Root store")
+
+            if not in_machine and not in_user:
+                print("ℹ️ Certificate not found in Windows certificate stores")
+                return False
+
+            return True
         except subprocess.TimeoutExpired:
             print("⚠️ Certificate check timed out")
             return False
@@ -144,27 +172,54 @@ class CertificateManager:
             if sys.platform == "win32":
                 # First check if certificate is already installed
                 try:
-                    if self.is_certificate_installed_windows():
-                        print("✅ Certificate already installed in Windows certificate store")
+                    if self._is_cert_installed_in_store_windows("machine"):
+                        print("✅ Certificate already installed in LocalMachine\\Root")
                         return True
+                    if self._is_cert_installed_in_store_windows("user"):
+                        print("✅ Certificate already installed in CurrentUser\\Root")
+                        # Warn that LocalMachine is preferred
+                        print("⚠️ Warning: Certificate installed only for CurrentUser. LocalMachine\\Root is recommended for full trust.")
+                        # Continue and try to upgrade to LocalMachine if possible
                 except Exception as check_error:
                     print(f"⚠️ Certificate check failed: {check_error}")
                     # Continue with installation attempt
                     
-                # Windows: Use certutil
-                cmd = ["certutil", "-addstore", "root", cert_path]
+                # Try to install into LocalMachine Root (preferred)
                 try:
-                    result = subprocess.run(cmd, capture_output=True, text=True, shell=True, timeout=60)
-                    
+                    print("🔐 Attempting to install certificate to LocalMachine\\Root...")
+                    cmd_machine = ["certutil", "-addstore", "root", cert_path]
+                    result = subprocess.run(cmd_machine, capture_output=True, text=True, shell=True, timeout=60)
                     if result.returncode == 0:
                         print(_('cert_installed_success'))
+                        print("✅ mitmproxy CA installed in LocalMachine\\Root")
                         return True
                     else:
-                        error_msg = result.stderr.strip() if result.stderr.strip() else "Certificate installation failed with no specific error message"
+                        error_msg = (result.stderr or result.stdout or "").strip()
+                        print(f"⚠️ LocalMachine install failed: {error_msg}")
+                except subprocess.TimeoutExpired:
+                    print(_('cert_install_error').format("Certificate installation to LocalMachine timed out"))
+                except Exception as e:
+                    print(f"⚠️ LocalMachine install error: {e}")
+
+                # If LocalMachine failed (likely due to no admin), try CurrentUser as fallback and WARN
+                try:
+                    print("🧩 Falling back to CurrentUser\\Root installation...")
+                    cmd_user = ["certutil", "-user", "-addstore", "root", cert_path]
+                    result_user = subprocess.run(cmd_user, capture_output=True, text=True, shell=True, timeout=60)
+                    if result_user.returncode == 0:
+                        print(_('cert_installed_success'))
+                        print("✅ mitmproxy CA installed in CurrentUser\\Root")
+                        print("⚠️ WARNING: LocalMachine\\Root installation is recommended for best compatibility. Run the app as Administrator to install system-wide.")
+                        return True
+                    else:
+                        error_msg = (result_user.stderr or result_user.stdout or "").strip()
                         print(_('cert_install_error').format(error_msg))
                         return False
                 except subprocess.TimeoutExpired:
-                    print(_('cert_install_error').format("Certificate installation timed out"))
+                    print(_('cert_install_error').format("Certificate installation to CurrentUser timed out"))
+                    return False
+                except Exception as e:
+                    print(_('cert_install_error').format(str(e)))
                     return False
                     
             elif sys.platform == "darwin":
@@ -184,9 +239,6 @@ class CertificateManager:
                 if result_system.returncode == 0:
                     print(_('cert_installed_success'))
                     return True
-                elif "already in" in result_system.stderr:
-                    print("✅ Certificate already installed in system keychain")
-                    return True
                 else:
                     print(f"System keychain failed: {result_system.stderr}")
                 
@@ -198,12 +250,7 @@ class CertificateManager:
                 cmd_add = ["security", "add-cert", "-k", user_keychain, cert_path]
                 result_add = subprocess.run(cmd_add, capture_output=True, text=True)
                 
-                # Check if certificate is already installed (this is actually success)
-                if result_add.returncode == 0 or "already in" in result_add.stderr:
-                    if "already in" in result_add.stderr:
-                        print("✅ Certificate already installed in login keychain")
-                        return True
-                    
+                if result_add.returncode == 0:
                     # Then set trust policy explicitly
                     cmd_trust = [
                         "security", "add-trusted-cert",

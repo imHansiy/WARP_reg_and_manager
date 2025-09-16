@@ -8,16 +8,6 @@ Utility functions for the application
 import os
 import socket
 from src.config.languages import _
-import sys
-import subprocess
-from src.managers.certificate_manager import CertificateManager
-from src.proxy.proxy_macos import MacOSProxyManager
-import time
-import glob
-import re
-import json
-import datetime
-import platform
 
 
 def load_stylesheet(app):
@@ -106,12 +96,14 @@ def format_file_size(size_bytes):
 
 def validate_email(email):
     """Basic email validation"""
+    import re
     pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
     return re.match(pattern, email) is not None
 
 
 def safe_json_loads(json_string):
     """Safely load JSON string with error handling"""
+    import json
     try:
         return json.loads(json_string)
     except (json.JSONDecodeError, TypeError) as e:
@@ -238,69 +230,3 @@ def get_system_info():
         'processor': platform.processor(),
         'hostname': platform.node()
     }
-
-
-def auto_diagnose_and_fix():
-    """Автоматическая диагностика и исправление для macOS (сертификат, порт, mitmproxy, прокси)"""
-    if sys.platform != "darwin":
-        print("Автоматическая диагностика реализована только для macOS")
-        return False
-
-    cert_manager = CertificateManager()
-    cert_path = cert_manager.get_certificate_path()
-    print(f"Путь к сертификату: {cert_path}")
-
-    # 1. Проверка наличия сертификата
-    if not cert_manager.check_certificate_exists():
-        print("❌ Сертификат mitmproxy не найден. Генерирую...")
-        subprocess.run(["mitmdump", "--set", "confdir=~/.mitmproxy", "-q"], timeout=10)
-        if not cert_manager.check_certificate_exists():
-            print("❌ Не удалось создать сертификат mitmproxy!")
-            return False
-        print("✅ Сертификат mitmproxy создан.")
-    else:
-        print("✅ Сертификат mitmproxy найден.")
-
-    # 2. Проверка доверия сертификата
-    if not cert_manager.verify_certificate_trust_macos():
-        print("⚠️ Сертификат не доверен. Пробую исправить...")
-        if not cert_manager.fix_certificate_trust_macos():
-            print("❌ Не удалось автоматически доверить сертификат. Требуется ручная установка!")
-            return False
-        print("✅ Сертификат теперь доверен.")
-    else:
-        print("✅ Сертификат доверен.")
-
-    # 3. Проверка порта 8080
-    if is_port_open("127.0.0.1", 8080):
-        print("⚠️ Порт 8080 уже занят. Пробую завершить процессы mitmproxy...")
-        subprocess.run(["pkill", "-f", "mitmdump"])
-        time.sleep(2)
-        if is_port_open("127.0.0.1", 8080):
-            print("❌ Порт 8080 всё ещё занят. Освободите порт вручную!")
-            return False
-        print("✅ Порт 8080 освобождён.")
-    else:
-        print("✅ Порт 8080 свободен.")
-
-    # 4. Проверка запуска mitmproxy
-    print("Пробую запустить mitmproxy...")
-    proc = subprocess.Popen(["mitmdump", "--listen-host", "127.0.0.1", "-p", "8080", "-q"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    time.sleep(5)
-    if not is_port_open("127.0.0.1", 8080):
-        print("❌ Не удалось запустить mitmproxy!")
-        proc.terminate()
-        return False
-    print("✅ mitmproxy успешно запущен.")
-    proc.terminate()
-    time.sleep(2)
-
-    # 5. Проверка и настройка прокси
-    print("Пробую автоматически настроить системный прокси...")
-    if not MacOSProxyManager.set_proxy("127.0.0.1:8080"):
-        print("❌ Не удалось автоматически настроить прокси!")
-        return False
-    print("✅ Прокси macOS настроен.")
-
-    print("\nАвтоматическая диагностика и исправление завершены успешно! Всё готово к работе.")
-    return True

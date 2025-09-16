@@ -25,6 +25,11 @@ class WindowsProxyManager:
             # Set proxy settings
             winreg.SetValueEx(key, "ProxyEnable", 0, winreg.REG_DWORD, 1)
             winreg.SetValueEx(key, "ProxyServer", 0, winreg.REG_SZ, proxy_server)
+            # Set ProxyOverride for localhost stability
+            try:
+                winreg.SetValueEx(key, "ProxyOverride", 0, winreg.REG_SZ, "localhost;127.0.0.1;<local>")
+            except Exception:
+                pass
 
             winreg.CloseKey(key)
 
@@ -55,6 +60,7 @@ class WindowsProxyManager:
 
             # Disable proxy
             winreg.SetValueEx(key, "ProxyEnable", 0, winreg.REG_DWORD, 0)
+            # Keep ProxyServer and ProxyOverride as-is; user may want to retain settings
 
             winreg.CloseKey(key)
             
