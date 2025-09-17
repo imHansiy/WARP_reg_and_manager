@@ -2019,7 +2019,7 @@ class MainWindow(QMainWindow):
     def show_help_dialog(self):
         """Open Telegram for help"""
         import webbrowser
-        webbrowser.open("https://t.me/warp_account_manager_help")
+        webbrowser.open("https://t.me/D3vin_chat")
 
     def refresh_ui_texts(self):
         """Update UI texts to English"""
