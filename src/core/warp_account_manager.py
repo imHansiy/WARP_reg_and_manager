@@ -632,8 +632,7 @@ class MainWindow(QMainWindow):
             try:
                 import curl_cffi
                 import bs4
-                from src.managers.temp_email_manager import create_temporary_email
-                # Start creation process in separate thread
+                # Dependencies available - start creation process
                 self._start_account_creation()
             except ImportError as ie:
                 print(f"Import error: {ie}")

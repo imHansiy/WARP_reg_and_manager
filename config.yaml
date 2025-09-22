@@ -1,0 +1,45 @@
+mail:
+  blocked_domains:
+  - notboxletters.com
+  - notboxletters.com
+  - notlettersmail.com
+  - lettersboxmail.com
+  - nolettersbox.com
+  imap_settings:
+    autorambler.ru: imap.rambler.ru
+    belettersmail.com: imap.notletters.com
+    chromomail.com: imap.firstmail.ltd
+    consaltemail.com: imap.notletters.com
+    derrenmail.com: imap.firstmail.ltd
+    desedumail.com: imap.firstmail.ltd
+    fumesmail.com: imap.firstmail.ltd
+    gazeta.pl: imap.gazeta.pl
+    gmail.com: imap.gmail.com
+    gmx.com: imap.gmx.com
+    gmx.de: imap.gmx.net
+    gmx.net: imap.gmx.net
+    hotmail.com: imap-mail.outlook.com
+    lenta.ru: imap.rambler.ru
+    lettersboxmail.com: imap.notletters.com
+    limandomail.com: imap.firstmail.ltd
+    mail.ru: imap.mail.ru
+    myrambler.ru: imap.rambler.ru
+    nolettersbox.com: imap.notletters.com
+    notboxletters.com: imap.notletters.com
+    notlettersmail.com: imap.notletters.com
+    onelettersmail.com: imap.notletters.com
+    onet.com.pl: imap.poczta.onet.pl
+    onet.eu: imap.poczta.onet.pl
+    onet.pl: imap.poczta.onet.pl
+    op.pl: imap.poczta.onet.pl
+    outlook.com: imap-mail.outlook.com
+    pragresivemail.com: imap.notletters.com
+    prefarcedemail.com: imap.notletters.com
+    prefarmencmail.com: imap.notletters.com
+    rambler.ru: imap.rambler.ru
+    ro.ru: imap.rambler.ru
+    t-online.de: secureimap.t-online.de
+    yahoo.com: imap.mail.yahoo.com
+  use_single_imap:
+    enable: false
+    imap_server: imap.gmail.com

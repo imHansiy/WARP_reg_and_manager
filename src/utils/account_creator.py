@@ -4,18 +4,31 @@
 import asyncio
 import json
 import logging
+import os
 from typing import Optional, Dict, Any
-from src.managers.temp_email_manager import TempEmailManager
+from src.managers.temp_email_manager import check_if_email_valid, check_email_for_code
 from src.utils.warp_registration import WarpRegistrationManager
 
 
 class AutoAccountCreator:
-    """Automatic Warp.dev account creator with email verification"""
+    """Automatic Warp.dev account creator with IMAP email verification"""
     
-    def __init__(self, proxy_file: str = "proxy.txt"):
+    def __init__(self, email_file: str = "emails.txt", proxy_file: str = "proxy.txt", config_file: str = "config.yaml"):
+        self.email_file = email_file
         self.proxy_file = proxy_file
+        self.config_file = config_file
         self.max_wait_time = 60  # Maximum wait time for email in seconds
         self.check_interval = 5   # Check email every 5 seconds
+        
+        # Validate file paths on initialization
+        self._validate_files()
+        
+    def _validate_files(self) -> None:
+        """Validate that required files exist"""
+        if not os.path.exists(self.email_file):
+            raise FileNotFoundError(f"Email file not found: {self.email_file}")
+        if not os.path.exists(self.config_file):
+            logging.warning(f"Config file not found: {self.config_file}, using defaults")
         
     def _is_proxy_error(self, error_msg: str) -> bool:
         """Check if error is related to proxy issues"""
@@ -42,73 +55,164 @@ class AutoAccountCreator:
     async def create_account(self) -> Optional[Dict[str, Any]]:
         """Create complete Warp.dev account automatically"""
         try:
-            # Create temporary email
-            email_result = await self._create_temp_email()
-            if not email_result:
-                return None
+            print("🚀 Starting automatic account creation...")
+            
+            # Get email account from file
+            print("📧 Setting up email connection...")
+            email_info = await self._setup_email_connection()
+            if not email_info:
+                print("❌ Failed to setup email connection")
+                return self._create_error_result("email_error", "Failed to setup email connection")
                 
-            email = email_result['email']
-            email_token = email_result['token']
-            email_url_base = email_result['url_base']
+            email = email_info['email']
+            print(f"✅ Using email account: {email}")
             
             # Send verification code
+            print("📤 Sending verification code...")
             verification_sent = await self._send_verification_code(email)
             if not verification_sent:
-                return None
+                print("❌ Failed to send verification code")
+                return self._create_error_result("verification_error", "Failed to send verification code")
+            print("✅ Verification code sent")
             
             # Wait for email and extract code
-            oob_code = await self._wait_for_verification_email(
-                email_token, email_url_base
-            )
+            print("⏳ Waiting for verification email...")
+            oob_code = await self._wait_for_verification_email_imap(email)
             if not oob_code:
-                return None
+                print("❌ Failed to receive verification email")
+                return self._create_error_result("email_code_error", "Failed to receive verification email within timeout")
+            print(f"✅ Verification code received: {oob_code}")
             
             # Complete registration
+            print("🔐 Completing registration...")
             account_data = await self._complete_registration(email, oob_code)
             if not account_data:
-                return None
+                print("❌ Failed to complete registration")
+                return self._create_error_result("registration_error", "Failed to complete registration")
+            print("✅ Account registration completed successfully!")
             
             return {
                 "email": email,
                 "account_data": account_data,
-                "temp_email_info": email_result
+                "email_info": email_info
             }
             
         except Exception as e:
             error_msg = str(e)
+            print(f"❌ Error in create_account: {error_msg}")
             logging.error(f"Error in create_account: {error_msg}")
             
             # Check if it's a proxy-related error
             if self._is_proxy_error(error_msg):
-                return {
-                    "error": "proxy_error",
-                    "message": "Proxy connection failed. Please try a different proxy.",
-                    "technical_details": error_msg
-                }
+                return self._create_error_result(
+                    "proxy_error", 
+                    "Proxy connection failed. Please try a different proxy.",
+                    error_msg
+                )
+            elif "emails.txt" in error_msg or "email" in error_msg.lower():
+                return self._create_error_result(
+                    "email_error",
+                    "Email configuration error. Please check emails.txt file.",
+                    error_msg
+                )
+            elif "Missing dependencies" in error_msg or "cannot import" in error_msg:
+                return self._create_error_result(
+                    "dependency_error",
+                    "Missing required dependencies. Please install all required packages.",
+                    error_msg
+                )
             else:
-                return {
-                    "error": "general_error",
-                    "message": self._get_user_friendly_error(error_msg),
-                    "technical_details": error_msg
-                }
-            return None
+                return self._create_error_result(
+                    "general_error",
+                    self._get_user_friendly_error(error_msg),
+                    error_msg
+                )
+                
+    def _create_error_result(self, error_type: str, message: str, technical_details: str = "") -> Dict[str, Any]:
+        """Create standardized error result"""
+        result = {
+            "error": error_type,
+            "message": message,
+            "technical_details": technical_details or message
+        }
+        
+        print(f"😫 {error_type.replace('_', ' ').title()}: {message}")
+        
+        # Provide specific guidance based on error type
+        if error_type == "email_error":
+            print("📁 Make sure emails.txt exists with format: email:password")
+        elif error_type == "proxy_error":
+            print("📁 Check proxy.txt file and verify proxy settings")
+        elif error_type == "dependency_error":
+            print("📁 Run: pip install -r requirements.txt")
+            
+        return result
     
-    async def _create_temp_email(self) -> Optional[Dict[str, Any]]:
-        """Create temporary email address"""
+    async def _setup_email_connection(self) -> Optional[Dict[str, Any]]:
+        """Setup email connection using IMAP with config.yaml server detection"""
         try:
-            async with TempEmailManager(self.proxy_file) as manager:
-                result = await manager.create_temp_email()
-                return result
+            # Read first email from file for validation
+            if not os.path.exists(self.email_file):
+                raise FileNotFoundError(f"Email file not found: {self.email_file}")
+                
+            with open(self.email_file, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+                
+            for line in lines:
+                line = line.strip()
+                if not line or line.startswith('#') or ':' not in line:
+                    continue
+                    
+                email, password = line.split(':', 1)
+                email = email.strip()
+                password = password.strip()
+                
+                # Test email connection using config.yaml
+                is_valid = await check_if_email_valid(email, password, self.config_file)
+                if is_valid:
+                    return {
+                        'email': email,
+                        'password': password,
+                        'service': 'imap'
+                    }
+                    
+            raise Exception("No valid email accounts found in emails.txt")
+            
         except Exception as e:
             error_msg = str(e)
-            # Check for proxy-related errors
-            if self._is_proxy_error(error_msg):
-                proxy_error_msg = self._get_proxy_error_message(error_msg)
-                logging.error(f"Proxy error creating temp email: {proxy_error_msg}")
-                raise Exception(proxy_error_msg)
-            else:
-                logging.error(f"Error creating temp email: {e}")
-                return None
+            print(f"❌ Error setting up email: {error_msg}")
+            logging.error(f"Error setting up email: {e}")
+            return None
+    
+    async def _wait_for_verification_email_imap(self, email: str) -> Optional[str]:
+        """Wait for verification email using IMAP and extract oob code"""
+        try:
+            # Get email credentials from setup
+            if not os.path.exists(self.email_file):
+                raise FileNotFoundError(f"Email file not found: {self.email_file}")
+                
+            with open(self.email_file, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+                
+            for line in lines:
+                line = line.strip()
+                if not line or line.startswith('#') or ':' not in line:
+                    continue
+                    
+                file_email, password = line.split(':', 1)
+                file_email = file_email.strip()
+                password = password.strip()
+                
+                if file_email == email:
+                    # Use the updated function with config.yaml
+                    return await check_email_for_code(email, password, max_attempts=8, delay_seconds=3, config_file=self.config_file)
+                    
+            raise Exception(f"Email {email} not found in emails.txt")
+            
+        except Exception as e:
+            print(f"❌ Error waiting for email: {e}")
+            logging.error(f"Error waiting for email: {e}")
+            return None
     
     def _get_proxy_error_message(self, error_msg: str) -> str:
         """Get user-friendly proxy error message"""
@@ -138,47 +242,7 @@ class AutoAccountCreator:
                 logging.error(f"Error sending verification: {e}")
                 return False
     
-    async def _wait_for_verification_email(self, token: str, url_base: str) -> Optional[str]:
-        """Wait for verification email and extract oob code"""
-        try:
-            async with TempEmailManager(self.proxy_file) as manager:
-                wait_count = 0
-                max_attempts = self.max_wait_time // self.check_interval
-                
-                while wait_count < max_attempts:
-                    # Use new method for automatic content reading
-                    messages = await manager.get_messages_with_content(token, url_base)
-                    if messages:
-                        # Search for message from Firebase/Warp
-                        for message in messages:
-                            sender = message.get('from', {}).get('address', '') or message.get('sender_email', '')
-                            subject = message.get('subject', '')
-                            
-                            if ('firebase' in sender.lower() or 'warp' in subject.lower() or 
-                                'sign in' in subject.lower()):
-                                
-                                # Check HTML content first
-                                html_content = message.get('html_text', '') or message.get('html', '')
-                                if html_content:
-                                    oob_code = manager.extract_oob_code(html_content)
-                                    if oob_code:
-                                        return oob_code
-                                
-                                # Then check text content
-                                text_content = message.get('text', '') or message.get('content', '')
-                                if text_content:
-                                    oob_code = manager.extract_oob_code(text_content)
-                                    if oob_code:
-                                        return oob_code
-                    
-                    wait_count += 1
-                    if wait_count < max_attempts:
-                        await asyncio.sleep(self.check_interval)
-                return None
-                
-        except Exception as e:
-            logging.error(f"Error waiting for email: {e}")
-            return None
+    # Removed old temp email methods - using IMAP instead
     
     async def _complete_registration(self, email: str, oob_code: str) -> Optional[Dict[str, Any]]:
         """Complete account registration with oob code"""
@@ -225,7 +289,7 @@ class AutoAccountCreator:
 
 async def create_warp_account_automatically(proxy_file: str = "proxy.txt") -> Optional[Dict[str, Any]]:
     """Convenience function to create Warp account automatically"""
-    creator = AutoAccountCreator(proxy_file)
+    creator = AutoAccountCreator(email_file="emails.txt", proxy_file=proxy_file, config_file="config.yaml")
     return await creator.create_account()
 
 

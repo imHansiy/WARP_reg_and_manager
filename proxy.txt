@@ -1,1 +1,6 @@
-http://login:pass@ip:port
+ # Support formats:
+            # HTTP: http://user:pass@host:port, http://host:port
+            # HTTPS: https://user:pass@host:port, https://host:port  
+            # SOCKS5: socks5://user:pass@host:port, socks5://host:port
+            # SOCKS4: socks4://user:pass@host:port, socks4://host:port
+            # Simple: user:pass@host:port (default http), host:port (default http)

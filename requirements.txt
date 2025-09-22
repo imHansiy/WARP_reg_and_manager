@@ -5,3 +5,5 @@ psutil
 requests[socks]
 curl_cffi
 beautifulsoup4
+imap_tools
+PyYAML
