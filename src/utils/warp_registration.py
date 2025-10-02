@@ -338,17 +338,27 @@ class WarpRegistrationManager:
             logging.error(f"Error looking up account info: {e}")
             return None
 
-    async def get_or_create_warp_user(self, id_token: str) -> Optional[Dict[str, Any]]:
+    def _generate_session_id(self) -> str:
+        """Generate a unique session ID in UUID format"""
+        return str(uuid.uuid4())
+
+    async def get_or_create_warp_user(self, id_token: str, session_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Create or get Warp user profile using idToken"""
         try:
             if not self.session:
                 logging.error("Session not initialized")
                 return None
                 
+            # Generate session ID if not provided
+            if session_id is None:
+                session_id = self._generate_session_id()
+                
             payload = {
                 "operationName": "GetOrCreateUser",
                 "variables": {
-                    "input": {},
+                    "input": {
+                        "sessionId": session_id
+                    },
                     "requestContext": {
                         "osContext": {},
                         "clientContext": {}
