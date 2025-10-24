@@ -1,1 +1,1 @@
-# Configuration and language files
+# 配置文件和语言文件

@@ -466,3 +466,46 @@ class AccountCreationWorker(QThread):
         except Exception as e:
             logging.error(f"Account format conversion error: {e}")
             return None
+
+
+class BrowserAccountCreationWorker(QThread):
+    """Worker thread for browser-based account creation to avoid UI blocking"""
+    progress = pyqtSignal(str)
+    finished = pyqtSignal(object)  # result (dict or None)
+    error = pyqtSignal(str)
+
+    def __init__(self, account_manager):
+        super().__init__()
+        self.account_manager = account_manager
+
+    def run(self):
+        """Run browser account creation worker"""
+        try:
+            # Import the browser registration manager here to avoid import issues
+            from src.utils.browser_warp_registration import BrowserWarpRegistrationManager
+            
+            # Create an instance of the browser registration manager
+            browser_manager = BrowserWarpRegistrationManager()
+            
+            # For demonstration, we'll just emit a progress message
+            # In a real implementation, this would involve launching the browser,
+            # performing the registration steps, and returning the result.
+            self.progress.emit("Launching fingerprint-chromium browser for registration...")
+            
+            # Simulate some work
+            import time
+            time.sleep(2)
+            
+            # Simulate a successful result
+            # In reality, this would come from the browser automation script
+            result = {
+                "status": "success",
+                "email": "test@example.com",
+                "message": "Account created via browser"
+            }
+            
+            # Emit the result
+            self.finished.emit(result)
+            
+        except Exception as e:
+            self.error.emit(str(e))

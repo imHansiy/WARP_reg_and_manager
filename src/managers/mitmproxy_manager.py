@@ -33,8 +33,12 @@ class MitmProxyManager:
     def start(self, parent_window=None):
         """Start Mitmproxy"""
         try:
+            if self.is_port_open("127.0.0.1", self.port):
+                print(f"⚠️ Port {self.port} is in use. Trying port 8081 instead.")
+                self.port = 8081
+
             if self.is_running():
-                print("Mitmproxy zaten çalışıyor")
+                print("Mitmproxy is already running")
                 return True
 
             # First, check if mitmproxy is properly installed
@@ -370,8 +374,23 @@ class MitmProxyManager:
         if not self.is_port_open("127.0.0.1", self.port):
             print(f"✅ Port {self.port} is available")
         else:
-            print(f"⚠️ Port {self.port} is already in use")
-            print("   Kill the process using this port or choose a different port")
+            print(f"⚠️ Port {self.port} is already in use. Attempting to kill the process.")
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    # Check if the process is listening on the target port
+                    for conn in proc.connections(kind='inet'):
+                        if conn.laddr.port == self.port and conn.status == 'LISTEN':
+                            print(f"Killing process '{proc.info['name']}' (PID: {proc.info['pid']}) listening on port {self.port}")
+                            proc.kill()
+                            proc.wait(timeout=5)  # Wait for the process to terminate
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                    continue
+            # Wait a bit longer for the OS to release the port
+            time.sleep(3)
+            if self.is_port_open("127.0.0.1", self.port):
+                print(f"❌ Failed to release port {self.port}.")
+            else:
+                print(f"✅ Port {self.port} has been successfully released.")
             
         return True
 

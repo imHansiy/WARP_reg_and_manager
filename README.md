@@ -1,99 +1,96 @@
-# Warp Account Registrator & Manager
+# Warp 账户注册器和管理器
 
-## 📢 Connect with Us
+## 📢 联系我们
 
-- **📢 Channel**: [https://t.me/D3_vin](https://t.me/D3_vin) - Latest updates and releases
-- **💬 Chat**: [https://t.me/D3vin_chat](https://t.me/D3vin_chat) - Community support and discussions
-- **📁 GitHub**: [https://github.com/D3-vin](https://github.com/D3-vin) - Source code and development
+- **📢 频道**: [https://t.me/D3_vin](https://t.me/D3_vin) - 最新更新和发布
+- **💬 聊天**: [https://t.me/D3vin_chat](https://t.me/D3vin_chat) - 社区支持和讨论
+- **📁 GitHub**: [https://github.com/D3-vin](https://github.com/D3-vin) - 源代码和开发
 
 ![Python](https://img.shields.io/badge/Python-3.6+-blue)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 ![License](https://img.shields.io/badge/License-Educational%20Use-green)
 
+❤️ 支持项目
+如果您觉得这个项目有价值，并感谢我们为获取和分享这些见解所付出的努力，请考虑支持该项目。您的贡献有助于保持此资源的更新，并允许我们进行进一步的探索。
 
+您可以通过以下方式表示支持：
 
-❤️ Support the Project
-If you find this collection valuable and appreciate the effort involved in obtaining and sharing these insights, please consider supporting the project. Your contribution helps keep this resource updated and allows for further exploration.
-
-You can show your support via:
-
-Cryptocurrency:
-- **EVM:** 0xeba21af63e707ce84b76a87d0ba82140048c057e  (ETH,BNB,etc)
+加密货币：
+- **EVM:** 0xeba21af63e707ce84b76a87d0ba82140048c057e (ETH, BNB 等)
 - **TRON:** TEfECnyz5G1EkFrUqnbFcWLVdLvAgW9Raa
 - **TON:** UQCJ7KC2zxV_zKwLahaHf9jxy0vsWRcvQFie_FUBJW-9LcEW
 - **BTC:** bc1qdag98y5yahs6wf7rsfeh4cadsjfzmn5ngpjrcf
 - **SOL:** EwXXR4VqmWSNz1sjhZ8qcQ882i4URwAwhixSPEbDzyv6
 - **SUI:** 0x76da9b74c61508fbbd0b3e1989446e036b0622f252dd8d07c3fce759b239b47d
 
+🙏 感谢您的支持！
 
-🙏 Thank you for your support!
+## 先决条件
 
-## Prerequisites
+- 系统上安装了 **Python 3.8+**
+- **pip** 包管理器（通常随 Python 一起提供）
 
-- **Python 3.8+** installed on your system
-- **pip** package manager (usually comes with Python)
+## 快速开始
 
-## Quick Start
-
-### 1. Install Dependencies
+### 1. 安装依赖
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Run the Application
+### 2. 运行应用程序
 ```bash
 python main.py
 ```
 
-**Note for Windows users**: You may need to run as Administrator for proxy functionality.
+**Windows 用户注意**：您可能需要以管理员身份运行才能使用代理功能。
 
-**Note for Linux users**: You may need to use `python3` instead of `python`:
+**Linux 用户注意**：您可能需要使用 `python3` 而不是 `python`：
 ```bash
 python3 main.py
 ```
 
-## Dependencies
+## 依赖项
 
-All dependencies are managed through `requirements.txt`:
+所有依赖项都通过 `requirements.txt` 进行管理：
 
-- **PyQt5** - GUI framework
-- **requests** - HTTP requests with SOCKS support
-- **mitmproxy** - Traffic interception and proxy
-- **psutil** - Process management
-- **sqlite3** - Database (built-in with Python)
+- **PyQt5** - GUI 框架
+- **requests** - 支持 SOCKS 的 HTTP 请求
+- **mitmproxy** - 流量拦截和代理
+- **psutil** - 进程管理
+- **sqlite3** - 数据库（Python 内置）
 
-Install all at once:
+一次性安装所有依赖项：
 ```bash
 pip install -r requirements.txt
 ```
 
-**Python not found:**
+**未找到 Python：**
 ```bash
 # Linux/macOS
 sudo apt install python3 python3-pip  # Ubuntu/Debian
 brew install python3                  # macOS with Homebrew
 
 # Windows
-# Download from https://python.org
+# 从 https://python.org 下载
 ```
 
-**PyQt5 installation issues on Linux:**
+**Linux 上的 PyQt5 安装问题：**
 ```bash
-# Try system package first
+# 首先尝试系统包
 sudo apt install python3-pyqt5 python3-pyqt5.qtwidgets
 
-# Then install other dependencies
+# 然后安装其他依赖项
 pip install -r requirements.txt
 ```
 
-**Permission issues (Windows):**
-- Right-click Command Prompt/PowerShell → "Run as Administrator"
-- Or install to user directory: `pip install -r requirements.txt --user`
+**权限问题 (Windows)：**
+- 右键单击命令提示符/PowerShell → “以管理员身份运行”
+- 或安装到用户目录：`pip install -r requirements.txt --user`
 
-**Display issues (Linux):**
-- Make sure you're running in a desktop environment
-- Check that `DISPLAY` or `WAYLAND_DISPLAY` environment variables are set
+**显示问题 (Linux)：**
+- 确保您在桌面环境中运行
+- 检查是否设置了 `DISPLAY` 或 `WAYLAND_DISPLAY` 环境变量
 
-## License
+## 许可证
 
-This project is open source. Please check the license file for details.
+该项目是开源的。有关详细信息，请查看许可证文件。

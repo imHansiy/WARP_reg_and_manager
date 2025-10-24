@@ -193,32 +193,32 @@ def check_process_using_port(port):
 
 def comprehensive_diagnosis():
     """Полная диагностика Windows proxy конфигурации"""
-    print("🔍 WINDOWS PROXY DIAGNOSIS TOOL")
+    print("🔍 Windows代理诊断工具")
     print("="*60)
     print()
     
     results = {}
     
     # 1. Проверка настроек прокси в реестре
-    print("1️⃣ Checking Windows Proxy Registry Settings...")
+    print("1️⃣ 检查Windows代理注册表设置...")
     registry_settings = get_registry_proxy_settings()
     results['registry'] = registry_settings
     
     if 'error' in registry_settings:
-        print(f"   ❌ Registry Error: {registry_settings['error']}")
+        print(f"   ❌ 注册表错误: {registry_settings['error']}")
     else:
-        print(f"   ProxyEnable: {registry_settings.get('ProxyEnable', 'Not Set')}")
-        print(f"   ProxyServer: {registry_settings.get('ProxyServer', 'Not Set')}")
-        print(f"   ProxyOverride: {registry_settings.get('ProxyOverride', 'Not Set')}")
+        print(f"   ProxyEnable: {registry_settings.get('ProxyEnable', '未设置')}")
+        print(f"   ProxyServer: {registry_settings.get('ProxyServer', '未设置')}")
+        print(f"   ProxyOverride: {registry_settings.get('ProxyOverride', '未设置')}")
         
         if registry_settings.get('ProxyEnable'):
-            print("   ✅ Proxy is ENABLED in registry")
+            print("   ✅ 代理在注册表中已启用")
         else:
-            print("   ❌ Proxy is DISABLED in registry")
+            print("   ❌ 代理在注册表中已禁用")
     print()
     
     # 2. Проверка доступности порта
-    print("2️⃣ Checking Port 8080 Availability...")
+    print("2️⃣ 检查端口8080可用性...")
     port_open = check_port_open("127.0.0.1", 8080)
     results['port_8080'] = port_open
     

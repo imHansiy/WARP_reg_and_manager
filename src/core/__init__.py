@@ -1,1 +1,1 @@
-# Core application modules
+# 核心应用程序模块

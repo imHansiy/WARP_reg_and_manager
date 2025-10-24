@@ -2,213 +2,213 @@
 # -*- coding: utf-8 -*-
 
 """
-Simplified English-only language system
+Simplified Chinese-only language system
 """
 
 class LanguageManager:
-    """English-only language manager"""
+    """Chinese-only language manager"""
 
     def __init__(self):
-        self.current_language = 'en'
+        self.current_language = 'zh'
         self.translations = self.load_translations()
 
     def detect_system_language(self):
-        """Always return English"""
-        return 'en'
+        """Always return Chinese"""
+        return 'zh'
 
     def load_translations(self):
-        """Load English translations"""
+        """Load Chinese translations"""
         translations = {
-            'en': {
+            'zh': {
                 # General
-                'app_title': 'Warp Account Manager',
-                'yes': 'Yes',
-                'no': 'No',
-                'ok': 'OK',
-                'cancel': 'Cancel',
-                'close': 'Close',
-                'error': 'Error',
-                'success': 'Success',
-                'warning': 'Warning',
-                'info': 'Information',
+                'app_title': 'Warp 账户管理器',
+                'yes': '是',
+                'no': '否',
+                'ok': '确定',
+                'cancel': '取消',
+                'close': '关闭',
+                'error': '错误',
+                'success': '成功',
+                'warning': '警告',
+                'info': '信息',
 
                 # Buttons
-                'proxy_start': 'Start Proxy',
-                'proxy_stop': 'Stop Proxy',
-                'proxy_active': 'Proxy Active',
-                'add_account': 'Manual Add Account',
-                'auto_add_account': 'Auto Add Account',
-                'refresh_limits': 'Refresh Limits',
-                'help': 'Help',
-                'activate': '🟢 Activate',
-                'deactivate': '🔴 Deactivate',
-                'delete_account': '🗑️ Delete Account',
-                'create_account': '🌐 Create Account',
-                'add': 'Add',
-                'copy_javascript': '📋 Copy JavaScript Code',
-                'copied': '✅ Copied!',
-                'copy_error': '❌ Error!',
-                'open_certificate': '📁 Open Certificate File',
-                'installation_complete': '✅ Installation Complete',
+                'proxy_start': '启动代理',
+                'proxy_stop': '停止代理',
+                'proxy_active': '代理激活',
+                'add_account': '手动添加账户',
+                'auto_add_account': '自动添加账户',
+                'refresh_limits': '刷新限制',
+                'auto_register': '浏览器自动注册',
+                'help': '帮助',
+                'activate': '🟢 激活',
+                'deactivate': '🔴 停用',
+                'delete_account': '🗑️ 删除账户',
+                'create_account': '🌐 创建账户',
+                'add': '添加',
+                'copy_javascript': '📋 复制JavaScript代码',
+                'copied': '✅ 已复制！',
+                'copy_error': '❌ 错误！',
+                'open_certificate': '📁 打开证书文件',
+                'installation_complete': '✅ 安装完成',
 
                 # Table headers
-                'current': 'Current',
-                'email': 'Email',
-                'status': 'Status',
-                'limit': 'Limit',
+                'current': '当前',
+                'email': '邮箱',
+                'status': '状态',
+                'limit': '限制',
 
                 # Activation button texts
-                'button_active': 'ACTIVE',
-                'button_inactive': 'INACTIVE',
-                'button_banned': 'BAN',
-                'button_start': 'Start',
-                'button_stop': 'Stop',
+                'button_active': '激活',
+                'button_inactive': '未激活',
+                'button_banned': '封禁',
+                'button_start': '启动',
+                'button_stop': '停止',
 
                 # Status messages
-                'status_active': 'Active',
-                'status_banned': 'BAN',
-                'status_token_expired': 'Token expired',
-                'status_proxy_active': ' (Proxy active)',
-                'status_error': 'Error',
-                'status_na': 'N/A',
-                'status_not_updated': 'Not updated',
-                'status_healthy': 'healthy',
-                'status_unhealthy': 'unhealthy',
-                'status_banned_key': 'banned',
+                'status_active': '激活',
+                'status_banned': '封禁',
+                'status_token_expired': '令牌过期',
+                'status_proxy_active': ' (代理激活)',
+                'status_error': '错误',
+                'status_na': '不适用',
+                'status_not_updated': '未更新',
+                'status_healthy': '健康',
+                'status_unhealthy': '不健康',
+                'status_banned_key': '封禁',
 
                 # Add account
-                'add_account_title': 'Manual Add Account',
-                'add_account_instruction': 'Paste account JSON data below:',
-                'add_account_placeholder': 'Paste JSON data here...',
-                'how_to_get_json': '❓ How to get JSON data?',
-                'how_to_get_json_close': '❌ Close',
-                'json_info_title': 'How to get JSON data?',
+                'add_account_title': '手动添加账户',
+                'add_account_instruction': '请在下方粘贴账户JSON数据:',
+                'add_account_placeholder': '在此粘贴JSON数据...',
+                'how_to_get_json': '❓ 如何获取JSON数据？',
+                'how_to_get_json_close': '❌ 关闭',
+                'json_info_title': '如何获取JSON数据？',
 
                 # Account dialog tabs
-                'tab_manual': 'Manual',
-                'manual_method_title': 'Manual JSON Addition',
+                'tab_manual': '手动',
+                'manual_method_title': '手动JSON添加',
 
                 # JSON steps
-                'step_1': '<b>Step 1:</b> Go to Warp site and log in',
-                'step_2': '<b>Step 2:</b> Open browser developer console (F12)',
-                'step_3': '<b>Step 3:</b> Go to Console tab',
-                'step_4': '<b>Step 4:</b> Paste the JavaScript code below into console',
-                'step_5': '<b>Step 5:</b> Press Enter',
-                'step_6': '<b>Step 6:</b> Click the button that appears on the page',
-                'step_7': '<b>Step 7:</b> Paste the copied JSON here',
+                'step_1': '<b>步骤1:</b> 访问Warp网站并登录',
+                'step_2': '<b>步骤2:</b> 打开浏览器开发者控制台 (F12)',
+                'step_3': '<b>步骤3:</b> 转到控制台标签',
+                'step_4': '<b>步骤4:</b> 将下面的JavaScript代码粘贴到控制台中',
+                'step_5': '<b>步骤5:</b> 按回车键',
+                'step_6': '<b>步骤6:</b> 点击页面上出现的按钮',
+                'step_7': '<b>步骤7:</b> 将复制的JSON粘贴在这里',
 
                 # Certificate installation
-                'cert_title': '🔒 Proxy certificate installation required',
-                'cert_explanation': '''For Warp Proxy to work properly, the mitmproxy certificate needs to be added to trusted root certificate authorities.
+                'cert_title': '🔒 需要安装代理证书',
+                'cert_explanation': '''为了让Warp代理正常工作，需要将mitmproxy证书添加到受信任的根证书颁发机构。
 
-This procedure is performed only once and does not affect system security.''',
-                'cert_steps': '📋 Installation steps:',
-                'cert_step_1': '<b>Step 1:</b> Click "Open Certificate File" button below',
-                'cert_step_2': '<b>Step 2:</b> Double-click the opened file',
-                'cert_step_3': '<b>Step 3:</b> Click "Install Certificate..." button',
-                'cert_step_4': '<b>Step 4:</b> Select "Local Machine" and click "Next"',
-                'cert_step_5': '<b>Step 5:</b> Select "Place all certificates in the following store"',
-                'cert_step_6': '<b>Step 6:</b> Click "Browse" button',
-                'cert_step_7': '<b>Step 7:</b> Select "Trusted Root Certification Authorities" folder',
-                'cert_step_8': '<b>Step 8:</b> Click "OK" and "Next" buttons',
-                'cert_step_9': '<b>Step 9:</b> Click "Finish" button',
-                'cert_path': 'Certificate file: {}',
+此过程只需执行一次，不会影响系统安全性。''',
+                'cert_steps': '📋 安装步骤:',
+                'cert_step_1': '<b>步骤1:</b> 点击下面的"打开证书文件"按钮',
+                'cert_step_2': '<b>步骤2:</b> 双击打开的文件',
+                'cert_step_3': '<b>步骤3:</b> 点击"安装证书..."按钮',
+                'cert_step_4': '<b>步骤4:</b> 选择"本地计算机"并点击"下一步"',
+                'cert_step_5': '<b>步骤5:</b> 选择"将所有证书放在以下存储中"',
+                'cert_step_6': '<b>步骤6:</b> 点击"浏览"按钮',
+                'cert_step_7': '<b>步骤7:</b> 选择"受信任的根证书颁发机构"文件夹',
+                'cert_step_8': '<b>步骤8:</b> 点击"确定"和"下一步"按钮',
+                'cert_step_9': '<b>步骤9:</b> 点击"完成"按钮',
+                'cert_path': '证书文件: {}',
 
                 # Automatic certificate installation
-                'cert_creating': '🔒 Creating certificate...',
-                'cert_created_success': '✅ Certificate file created successfully',
-                'cert_creation_failed': '❌ Failed to create certificate',
-                'cert_installing': '🔒 Checking certificate installation...',
-                'cert_installed_success': '✅ Certificate installed automatically',
-                'cert_install_failed': '❌ Certificate installation failed - administrator rights may be required',
-                'cert_install_error': '❌ Certificate installation error: {}',
+                'cert_creating': '🔒 正在创建证书...',
+                'cert_created_success': '✅ 证书文件创建成功',
+                'cert_creation_failed': '❌ 创建证书失败',
+                'cert_installing': '🔒 正在检查证书安装...',
+                'cert_installed_success': '✅ 证书已自动安装',
+                'cert_install_failed': '❌ 证书安装失败 - 可能需要管理员权限',
+                'cert_install_error': '❌ 证书安装错误: {}',
 
                 # Manual certificate installation dialog
-                'cert_manual_title': '🔒 Manual certificate installation required',
-                'cert_manual_explanation': '''Automatic certificate installation failed.
+                'cert_manual_title': '🔒 需要手动安装证书',
+                'cert_manual_explanation': '''自动证书安装失败。
 
-You need to install the certificate manually. This procedure is performed only once and does not affect system security.''',
-                'cert_manual_path': 'Certificate file location:',
-                'cert_manual_steps': '''<b>Manual installation steps:</b><br><br>
-<b>1.</b> Go to the file path specified above<br>
-<b>2.</b> Double-click the <code>mitmproxy-ca-cert.cer</code> file<br>
-<b>3.</b> Click "Install Certificate..." button<br>
-<b>4.</b> Select "Local Machine" and click "Next"<br>
-<b>5.</b> Select "Place all certificates in the following store"<br>
-<b>6.</b> Click "Browse" → Select "Trusted Root Certification Authorities"<br>
-<b>7.</b> Click "OK" → "Next" → "Finish"''',
-                'cert_open_folder': '📁 Open Certificate Folder',
-                'cert_manual_complete': '✅ Installation Complete',
+您需要手动安装证书。此过程只需执行一次，不会影响系统安全性。''',
+                'cert_manual_path': '证书文件位置:',
+                'cert_manual_steps': '''<b>手动安装步骤:</b><br><br>
+<b>1.</b> 转到上面指定的文件路径<br>
+<b>2.</b> 双击 <code>mitmproxy-ca-cert.cer</code> 文件<br>
+<b>3.</b> 点击"安装证书..."按钮<br>
+<b>4.</b> 选择"本地计算机"并点击"下一步"<br>
+<b>5.</b> 选择"将所有证书放在以下存储中"<br>
+<b>6.</b> 点击"浏览" → 选择"受信任的根证书颁发机构"<br>
+<b>7.</b> 点击"确定" → "下一步" → "完成"''',
+                'cert_open_folder': '📁 打开证书文件夹',
+                'cert_manual_complete': '✅ 安装完成',
 
                 # Messages
-                'account_added_success': 'Account added successfully',
-                'no_accounts_to_update': 'No accounts found to update',
-                'updating_limits': 'Updating limits...',
-                'processing_account': 'Processing: {}',
-                'refreshing_token': 'Refreshing token: {}',
-                'accounts_updated': 'Updated {} accounts',
-                'proxy_starting': 'Starting proxy...',
-                'proxy_configuring': 'Configuring Windows proxy...',
-                'proxy_started': 'Proxy started: {}',
-                'proxy_stopped': 'Proxy stopped',
-                'proxy_starting_account': 'Starting proxy and activating {}...',
-                'activating_account': 'Activating account: {}...',
-                'token_refreshing': 'Refreshing token: {}',
-                'proxy_started_account_activated': 'Proxy started and {} activated',
-                'windows_proxy_config_failed': 'Failed to configure Windows proxy',
-                'mitmproxy_start_failed': 'Failed to start Mitmproxy - check port 8080',
-                'proxy_start_error': 'Proxy start error: {}',
-                'proxy_stop_error': 'Proxy stop error: {}',
-                'account_not_found': 'Account not found',
-                'account_banned_cannot_activate': 'Account {} is banned - cannot activate',
-                'account_activation_error': 'Activation error: {}',
-                'token_refresh_in_progress': 'Token refresh in progress, please wait...',
-                'token_refresh_error': 'Token refresh error: {}',
-                'account_activated': 'Account {} activated',
-                'account_activation_failed': 'Failed to activate account',
-                'proxy_unexpected_stop': 'Proxy stopped unexpectedly',
-                'account_deactivated': 'Account {} deactivated',
-                'account_deleted': 'Account {} deleted',
-                'token_renewed': 'Token {} renewed',
-                'account_banned_detected': '⛔ Account {} banned!',
-                'token_renewal_progress': '🔄 Updated {}/{} tokens',
+                'account_added_success': '账户添加成功',
+                'no_accounts_to_update': '未找到要更新的账户',
+                'updating_limits': '正在更新限制...',
+                'processing_account': '正在处理: {}',
+                'refreshing_token': '正在刷新令牌: {}',
+                'accounts_updated': '已更新 {} 个账户',
+                'proxy_starting': '正在启动代理...',
+                'proxy_configuring': '正在配置Windows代理...',
+                'proxy_started': '代理已启动: {}',
+                'proxy_stopped': '代理已停止',
+                'proxy_starting_account': '正在启动代理并激活 {}...',
+                'activating_account': '正在激活账户: {}...',
+                'token_refreshing': '正在刷新令牌: {}',
+                'proxy_started_account_activated': '代理已启动并激活 {}',
+                'windows_proxy_config_failed': '配置Windows代理失败',
+                'mitmproxy_start_failed': '启动Mitmproxy失败 - 检查端口8080',
+                'proxy_start_error': '代理启动错误: {}',
+                'proxy_stop_error': '代理停止错误: {}',
+                'account_not_found': '未找到账户',
+                'account_banned_cannot_activate': '账户 {} 已封禁 - 无法激活',
+                'account_activation_error': '激活错误: {}',
+                'token_refresh_in_progress': '令牌刷新进行中，请稍候...',
+                'token_refresh_error': '令牌刷新错误: {}',
+                'account_activated': '账户 {} 已激活',
+                'account_activation_failed': '激活账户失败',
+                'proxy_unexpected_stop': '代理意外停止',
+                'account_deactivated': '账户 {} 已停用',
+                'account_deleted': '账户 {} 已删除',
+                'token_renewed': '令牌 {} 已续订',
+                'account_banned_detected': '⛔ 账户 {} 已封禁!',
+                'token_renewal_progress': '🔄 已更新 {}/{} 个令牌',
 
                 # Error messages
-                'invalid_json': 'Invalid JSON format',
-                'email_not_found': 'Email not found',
-                'certificate_not_found': 'Certificate file not found!',
-                'file_open_error': 'File open error: {}',
-                'proxy_start_failed': 'Failed to start proxy - check port 8080',
-                'proxy_config_failed': 'Failed to configure Windows proxy',
-                'token_refresh_failed': 'Failed to refresh token {}',
-                'account_delete_failed': 'Failed to delete account',
-                'enable_proxy_first': 'Start proxy first to activate account',
-                'limit_info_failed': 'Failed to get limit information',
-                'token_renewal_failed': '⚠️ Failed to renew token {}',
-                'token_check_error': '❌ Token check error',
-                'proxy_connection_failed': 'Proxy connection failed. Please try a different proxy.',
-                'proxy_auth_failed': 'Proxy authentication failed. Check proxy credentials.',
-                'proxy_timeout': 'Proxy connection timeout. Try a different proxy.',
+                'invalid_json': '无效的JSON格式',
+                'email_not_found': '未找到邮箱',
+                'certificate_not_found': '未找到证书文件!',
+                'file_open_error': '文件打开错误: {}',
+                'proxy_start_failed': '启动代理失败 - 检查端口8080',
+                'proxy_config_failed': '配置Windows代理失败',
+                'token_refresh_failed': '刷新令牌 {} 失败',
+                'account_delete_failed': '删除账户失败',
+                'enable_proxy_first': '先启动代理以激活账户',
+                'limit_info_failed': '获取限制信息失败',
+                'token_renewal_failed': '⚠️ 续订令牌 {} 失败',
+                'token_check_error': '❌ 令牌检查错误',
+                'proxy_connection_failed': '代理连接失败。请尝试不同的代理。',
+                'proxy_auth_failed': '代理认证失败。检查代理凭据。',
+                'proxy_timeout': '代理连接超时。尝试不同的代理。',
 
                 # Confirmation messages
                 'delete_account_confirm': 'Are you sure you want to delete account \'{}\' ?\\n\\nThis action cannot be undone!',
 
                 # Status bar messages
-                'default_status': 'Enable proxy and click start button on accounts to begin usage.',
-                'default_status_debug': 'Enable proxy and click start button on accounts to begin usage. (Debug mode active)',
+                'default_status': '启用代理并点击账户上的启动按钮开始使用。',
+                'default_status_debug': '启用代理并点击账户上的启动按钮开始使用。（调试模式激活）',
 
                 # Debug and console messages
-                'stylesheet_load_error': 'Failed to load stylesheet: {}',
-                'health_update_error': 'Health update error: {}',
-                'token_update_error': 'Token update error: {}',
-                'account_update_error': 'Account update error: {}',
-                'active_account_set_error': 'Active account set error: {}',
-                'active_account_clear_error': 'Active account clear error: {}',
-                'account_delete_error': 'Account delete error: {}',
-                'limit_info_update_error': 'Limit info update error: {}',
+                'stylesheet_load_error': '加载样式表失败: {}',
+                'health_update_error': '健康更新错误: {}',
+                'token_update_error': '令牌更新错误: {}',
+                'account_update_error': '账户更新错误: {}',
+                'active_account_set_error': '激活账户设置错误: {}',
+                'active_account_clear_error': '激活账户清除错误: {}',
+                'account_delete_error': '账户删除错误: {}',
+                'limit_info_update_error': '限制信息更新错误: {}',
             }
         }
-
         return translations
 
     def get_text(self, key, *args):
@@ -222,16 +222,16 @@ You need to install the certificate manually. This procedure is performed only o
             return key
 
     def set_language(self, language_code):
-        """Set language (always English)"""
+        """Set language (always Chinese)"""
         return True
 
     def get_current_language(self):
         """Return current language"""
-        return 'en'
+        return 'zh'
 
     def get_available_languages(self):
         """Return available languages"""
-        return ['en']
+        return ['zh']
 
 # Global language manager instance
 _language_manager = None

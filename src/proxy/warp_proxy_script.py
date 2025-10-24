@@ -15,27 +15,27 @@ import string
 from mitmproxy import http
 from mitmproxy.script import concurrent
 
-# Try to import languages module - use fallback if not available
+# 尝试导入语言模块 - 如果不可用则使用备用方案
 try:
     from src.config.languages import get_language_manager, _
 except ImportError:
     try:
-        # Fallback for when running from project root
+        # 从项目根目录运行时的备用方案
         import sys
         import os
         sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
         from src.config.languages import get_language_manager, _
     except ImportError:
-        # Final fallback if languages module is not available
+        # 如果语言模块不可用的最终备用方案
         def get_language_manager():
             return None
         def _(key):
             return key
 
-# Hide SSL warnings
+# 隐藏SSL警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# SSL verification bypass - complete SSL verification disable
+# SSL验证绕过 - 完全禁用SSL验证
 import ssl
 try:
     ssl._create_default_https_context = ssl._create_unverified_context

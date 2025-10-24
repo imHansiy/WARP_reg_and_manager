@@ -1,0 +1,5 @@
+.venv/
+bin/
+参考项目/
+*.pyc
+accounts.db
