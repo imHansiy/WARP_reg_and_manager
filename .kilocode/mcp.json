@@ -1,0 +1,57 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "isActive": true,
+      "name": "playwright",
+      "type": "stdio",
+      "description": "一个使用 Playwright 提供浏览器自动化功能的 Model Context Protocol (MCP) 服务器。该服务器使 LLM 能够通过结构化的无障碍快照与网页进行交互，从而绕过了对屏幕截图或视觉调优模型的需求。",
+      "registryUrl": "",
+      "command": "npx",
+      "args": [
+        "@playwright/mcp@latest",
+        "--output-dir",
+        "D:/工作/萌兽/ms-server-ums",
+        "--browser",
+        "msedge"
+      ],
+      "alwaysAllow": [
+        "browser_close",
+        "browser_console_messages",
+        "browser_handle_dialog",
+        "browser_evaluate",
+        "browser_file_upload",
+        "browser_fill_form",
+        "browser_install",
+        "browser_press_key",
+        "browser_type",
+        "browser_navigate",
+        "browser_navigate_back",
+        "browser_network_requests",
+        "browser_take_screenshot",
+        "browser_snapshot",
+        "browser_click",
+        "browser_drag",
+        "browser_hover",
+        "browser_select_option",
+        "browser_tabs",
+        "browser_wait_for",
+        "browser_resize"
+      ]
+    },
+    "context7": {
+      "timeout": 60,
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp@latest"
+      ]
+    },
+    "fetch": {
+      "command": "npx",
+      "args": [
+        "mcp-fetch-server"
+      ]
+    }
+  }
+}

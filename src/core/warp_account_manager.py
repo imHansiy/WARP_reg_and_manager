@@ -364,22 +364,22 @@ class MainWindow(QMainWindow):
         self.refresh_limits_button.setMinimumHeight(36)  # Taller modern buttons
         self.refresh_limits_button.clicked.connect(self.refresh_limits)
 
-        # Account creation button
+        # Account creation button (automatic)
         self.create_account_button = QPushButton(_('auto_add_account'))
         self.create_account_button.setObjectName("CreateAccountButton")
         self.create_account_button.setMinimumHeight(36)  # Taller modern buttons
         self.create_account_button.clicked.connect(self.create_new_account)
-        
-        # Browser-based auto registration button
-        self.auto_register_button = QPushButton(_('auto_register'))
-        self.auto_register_button.setObjectName("AutoRegisterButton")
-        self.auto_register_button.setMinimumHeight(36)
-        self.auto_register_button.clicked.connect(self.open_login_page)
+
+        # Browser auto-register button (moved from manual dialog to main page)
+        self.browser_auto_register_button = QPushButton(_('browser_auto_register'))
+        self.browser_auto_register_button.setObjectName("BrowserAutoRegisterButton")
+        self.browser_auto_register_button.setMinimumHeight(36)
+        self.browser_auto_register_button.clicked.connect(self.open_browser_registration_main)
 
         button_layout.addWidget(self.proxy_stop_button)
         button_layout.addWidget(self.add_account_button)
         button_layout.addWidget(self.create_account_button)
-        button_layout.addWidget(self.auto_register_button)
+        button_layout.addWidget(self.browser_auto_register_button)
         button_layout.addWidget(self.refresh_limits_button)
         button_layout.addStretch()
 
@@ -2202,6 +2202,31 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(
                 self, "Error", f"Failed to launch browser: {e}"
             )
+
+    def open_browser_registration_main(self):
+        """Run browser-based automated registration from main window (moved from manual dialog)."""
+        try:
+            # TODO: Move API Key to a secure config file
+            API_KEY = "mk_Xm1-2eoYCeYqhogQ0KagCy2E0vJX-BHm"
+
+            from src.utils.browser_warp_registration import register_warp_account_with_browser
+            import asyncio
+
+            self.browser_auto_register_button.setEnabled(False)
+            self.browser_auto_register_button.setText(_('registration_in_progress'))
+
+            loop = asyncio.get_event_loop()
+            result = loop.run_until_complete(register_warp_account_with_browser(API_KEY))
+
+            if result and result.get("status") == "success":
+                QMessageBox.information(self, _('success'), _('browser_registration_process_finished'))
+            else:
+                QMessageBox.critical(self, _('error'), _('registration_failed'))
+        except Exception as e:
+            QMessageBox.critical(self, _('error'), f"{_('registration_failed')}: {e}")
+        finally:
+            self.browser_auto_register_button.setEnabled(True)
+            self.browser_auto_register_button.setText(_('browser_auto_register'))
 
     def refresh_ui_texts(self):
         """Update UI texts to English"""
