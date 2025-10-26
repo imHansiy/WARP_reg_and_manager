@@ -12,9 +12,16 @@ import time
 import socket
 import psutil
 import logging
-from PyQt5.QtWidgets import QDialog, QMessageBox
+from PyQt5.QtWidgets import (QDialog, QMessageBox, QPlainTextEdit,
+                                 QVBoxLayout, QHBoxLayout, QPushButton)
+from PyQt5.QtCore import QTimer, QObject, pyqtSignal, Qt
 from src.managers.certificate_manager import CertificateManager, ManualCertificateDialog
 from src.config.languages import _
+import threading
+from queue import Queue
+
+class _LogEmitter(QObject):
+    log = pyqtSignal(str)
 
 
 class MitmProxyManager:
@@ -22,20 +29,34 @@ class MitmProxyManager:
 
     def __init__(self):
         self.process = None
-        self.port = 8080  # Original port
+        # Default base port, can be overridden by env or config file
+        self.base_port = 18080
+        self.port = None
         # Use warp_proxy_script.py from src/proxy directory (correct modular structure)
         project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        self.project_root = project_root
         self.script_path = os.path.join(project_root, "src", "proxy", "warp_proxy_script.py")
-        self.debug_mode = True  # Always debug mode for simplicity
+        self.debug_mode = False  # Use embedded console instead of external window
         self.cert_manager = CertificateManager()
         self._terminal_opened = False  # Track if terminal window was opened
+        self.mitmdump_path = self._find_mitmdump()
+        # Runtime options
+        self.verbose_console = self._detect_verbose_console()
+        self.warp_only_mode = self._detect_warp_only_mode()
+        # Embedded console components
+        self.console_dialog = None
+        self.console_text = None
+        self._log_queue = Queue()
+        self._log_timer = None
+        self.log_emitter = _LogEmitter()
+        # Load preferred port from env or file
+        self._load_preferred_port(project_root)
 
     def start(self, parent_window=None):
         """Start Mitmproxy"""
         try:
-            if self.is_port_open("127.0.0.1", self.port):
-                print(f"⚠️ Port {self.port} is in use. Trying port 8081 instead.")
-                self.port = 8081
+            # Choose an available port starting from base; auto-increment until free
+            self.port = self._choose_available_port(self.port, parent_window)
 
             if self.is_running():
                 print("Mitmproxy is already running")
@@ -46,13 +67,16 @@ class MitmProxyManager:
             if not self.check_mitmproxy_installation():
                 print("❌ Mitmproxy installation check failed")
                 return False
+            if not self.mitmdump_path:
+                print("❌ mitmdump executable could not be located")
+                return False
 
             # On first run, perform certificate check
             if not self.cert_manager.check_certificate_exists():
                 print(_('cert_creating'))
 
                 # Run short mitmproxy to create certificate
-                temp_cmd = ["mitmdump", "--set", "confdir=~/.mitmproxy", "-q"]
+                temp_cmd = [self.mitmdump_path, "--set", "confdir=~/.mitmproxy", "-q"]
                 try:
                     if parent_window:
                         parent_window.status_bar.showMessage(_('cert_creating'), 0)
@@ -124,43 +148,77 @@ class MitmProxyManager:
                     else:
                         return False
 
-            # Mitmproxy command exactly like old version
+            # Mitmproxy command exactly like old version, with quieter console by default
+            console_verbosity = "debug" if self.verbose_console else "error"
             cmd = [
-                "mitmdump",
+                self.mitmdump_path,
                 "--listen-host", "127.0.0.1",  # IPv4 listen
                 "-p", str(self.port),
                 "-s", self.script_path,
                 "--set", "confdir=~/.mitmproxy",
                 "--set", "keep_host_header=true",    # Keep host header
+                "--set", f"console_eventlog_verbosity={console_verbosity}",
+                # Trim flow output detail to minimize noise in mitmdump stdout
+                "--set", "flow_detail=0",
+                # Avoid eager upstream connects to reduce noise
+                "--set", "connection_strategy=lazy",
                 # Be conservative with protocols to avoid handshake bugs
                 "--set", "http2=false",
                 # Avoid TLS interception for known pinned/Google endpoints to prevent resets
                 "--ignore-hosts", r"^(?:[a-zA-Z0-9-]+\.)?googleapis\.com$",
                 "--ignore-hosts", r"^(?:[a-zA-Z0-9-]+\.)?gstatic\.com$",
                 "--ignore-hosts", r"^(?:[a-zA-Z0-9-]+\.)?google\.com$",
+                # Reduce noise from non-Warp apps commonly seen on CN desktops
+                "--ignore-hosts", r"^(?:[a-zA-Z0-9-]+\.)?cloudflareclient\.com$",
+                "--ignore-hosts", r"^(?:[a-zA-Z0-9-]+\.)?baidupcs\.com$",
             ]
+
+            # Optional: warp-only interception mode - ignore everything except Warp/Sentry/Rudderstack
+            if self.warp_only_mode:
+                # Ignore all hosts that do NOT match the allowlist (case-insensitive, include subdomains)
+                allowlist_pattern = r"^(?i)(?!(?:[a-z0-9-]+\.)?(?:warp\.dev|rudderstack\.com|sentry\.io)$).*"
+                cmd += ["--ignore-hosts", allowlist_pattern]
+                self._emit_log(parent_window, "Warp-only mode enabled: non-Warp hosts are passed through and hidden")
 
             print(f"Mitmproxy command: {' '.join(cmd)}")
 
             # Start process - platform-specific console handling like old version
             if sys.platform == "win32":
-                cmd_str = ' '.join(f'"{arg}"' if ' ' in arg else arg for arg in cmd)
+                # Quote all args for Windows shell
+                cmd_str = ' '.join(f'"{arg}"' for arg in cmd)
 
-                if self.debug_mode:
-                    # Debug mode: Console window visible
-                    print("Debug mode active - Mitmproxy console window will open")
-                    self.process = subprocess.Popen(
-                        f'start "Mitmproxy Console (Debug)" cmd /k "{cmd_str}"',
-                        shell=True
-                    )
-                else:
-                    # Normal mode: Hidden console window
-                    print("Normal mode - Mitmproxy will run in background")
-                    self.process = subprocess.Popen(
-                        cmd_str,
-                        shell=True,
-                        creationflags=subprocess.CREATE_NO_WINDOW
-                    )
+                # Run hidden and capture output; show in embedded console
+                print("Starting Mitmproxy in embedded console mode")
+                env = os.environ.copy()
+                env.setdefault('PYTHONUNBUFFERED', '1')
+                env.setdefault('PYTHONIOENCODING', 'utf-8')
+                self.process = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    encoding='utf-8',
+                    errors='replace',
+                    bufsize=1,
+                    env=env,
+                    creationflags=subprocess.CREATE_NO_WINDOW
+                )
+                # Open embedded console and start log pump
+                self._open_embedded_console(parent_window)
+                # Connect emitter to UI appender once
+                try:
+                    if parent_window and hasattr(parent_window, 'append_proxy_log'):
+                        # Avoid multiple connections
+                        try:
+                            self.log_emitter.log.disconnect()
+                        except Exception:
+                            pass
+                        self.log_emitter.log.connect(parent_window.append_proxy_log, Qt.QueuedConnection)
+                except Exception:
+                    pass
+                self._emit_log(parent_window, f"Mitmproxy command: {' '.join(cmd)}")
+                self._emit_log(parent_window, "Waiting for mitmproxy output...")
+                self._start_log_reader(parent_window)
 
                 # Windows start command returns immediately, so check port
                 print("Starting Mitmproxy, checking port...")
@@ -278,6 +336,38 @@ class MitmProxyManager:
             print(f"Ошибка запуска Mitmproxy: {e}")
             return False
     
+    def _open_embedded_console(self, parent_window=None):
+        # Create console in UI thread via parent_window
+        try:
+            if parent_window and hasattr(parent_window, 'show_proxy_console'):
+                QTimer.singleShot(0, parent_window.show_proxy_console)
+        except Exception as e:
+            print(f"Embedded console error: {e}")
+
+    def _emit_log(self, parent_window, line):
+        try:
+            self.log_emitter.log.emit(line)
+        except Exception:
+            pass
+
+    def _start_log_reader(self, parent_window=None):
+        def reader(stream):
+            try:
+                for line in iter(stream.readline, ''):
+                    if not line:
+                        break
+                    self._emit_log(parent_window, line.rstrip())
+            except Exception as e:
+                self._emit_log(parent_window, f"[log reader error] {e}")
+        if self.process and self.process.stdout:
+            threading.Thread(target=reader, args=(self.process.stdout,), daemon=True).start()
+        if self.process and self.process.stderr:
+            threading.Thread(target=reader, args=(self.process.stderr,), daemon=True).start()
+
+    def _pump_logs(self):
+        # No longer needed; logs are emitted directly to UI thread
+        pass
+
     def is_port_open(self, host, port):
         """Check if port is open"""
         import socket
@@ -339,14 +429,103 @@ class MitmProxyManager:
             
         print("\n📞 For more help, check mitmproxy documentation")
 
+    def _load_preferred_port(self, project_root: str):
+        """Load preferred base port from env or config file proxy_port.txt"""
+        try:
+            env_port = os.environ.get('WARP_PROXY_PORT')
+            if env_port and env_port.isdigit():
+                self.base_port = int(env_port)
+            else:
+                cfg_path = os.path.join(project_root, 'proxy_port.txt')
+                if os.path.exists(cfg_path):
+                    with open(cfg_path, 'r', encoding='utf-8') as f:
+                        txt = f.read().strip()
+                        if txt.isdigit():
+                            self.base_port = int(txt)
+        except Exception:
+            pass
+        # initialize current port with base
+        self.port = self.base_port
+
+    def _detect_verbose_console(self) -> bool:
+        """Return True if high mitmproxy console verbosity is requested."""
+        try:
+            # Env var overrides
+            env = os.environ.get('WARP_PROXY_VERBOSE')
+            if env is not None:
+                return env.strip() not in ("0", "false", "False", "no", "NO")
+            # debug.txt in project root enables verbose
+            dbg_path = os.path.join(self.project_root, 'debug.txt') if hasattr(self, 'project_root') else None
+            return bool(dbg_path and os.path.exists(dbg_path))
+        except Exception:
+            return False
+
+    def _detect_warp_only_mode(self) -> bool:
+        """Return True to enable 'Warp-only' interception when explicitly requested.
+        Enable by setting env WARP_PROXY_WARP_ONLY=1"""
+        try:
+            env = os.environ.get('WARP_PROXY_WARP_ONLY')
+            if env is None:
+                return False  # default off to avoid breaking proxying
+            return env.strip() not in ("0", "false", "False", "no", "NO")
+        except Exception:
+            return False
+
+    def _choose_available_port(self, preferred: int = None, parent_window=None) -> int:
+        """Return an available TCP port, starting from preferred/base_port.
+        Auto-increments until a free port is found (wraps around >65535 to 1024)."""
+        base = preferred or self.base_port
+        p = base
+        for _ in range(2000):  # safety cap
+            if not self.is_port_open('127.0.0.1', p):
+                if parent_window:
+                    self._emit_log(parent_window, f"Using proxy port {p}")
+                return p
+            else:
+                if parent_window:
+                    self._emit_log(parent_window, f"Port {p} in use, trying {p+1}")
+                p += 1
+                if p > 65535:
+                    p = 1024  # wrap to a safe low port range
+        # Fallback to base if somehow none found within attempts
+        if parent_window:
+            self._emit_log(parent_window, f"Fallback to base port {base}")
+        return base
+
+    def _find_mitmdump(self):
+        """Locate mitmdump executable (supports venv on Windows)."""
+        try:
+            from shutil import which
+            path = which('mitmdump')
+            if path:
+                return path
+            # Try venv Scripts on Windows
+            if sys.platform == 'win32':
+                cand = os.path.join(sys.prefix, 'Scripts', 'mitmdump.exe')
+                if os.path.exists(cand):
+                    return cand
+            else:
+                cand = os.path.join(sys.prefix, 'bin', 'mitmdump')
+                if os.path.exists(cand):
+                    return cand
+            # Allow override via env
+            env_path = os.environ.get('MITMDUMP_PATH')
+            if env_path and os.path.exists(env_path):
+                return env_path
+            return None
+        except Exception:
+            return None
+
     def check_mitmproxy_installation(self):
         """Check if mitmproxy is properly installed"""
         print("\n🔍 MITMPROXY INSTALLATION CHECK")
         print("="*50)
         
-        # Check if mitmdump command exists
+        # Check if mitmdump executable exists
         try:
-            result = subprocess.run(['mitmdump', '--version'], 
+            if not self.mitmdump_path:
+                raise FileNotFoundError('mitmdump not found')
+            result = subprocess.run([self.mitmdump_path, '--version'], 
                                   capture_output=True, text=True, timeout=10)
             if result.returncode == 0:
                 print(f"✅ Mitmproxy installed: {result.stdout.strip()}")
@@ -354,15 +533,12 @@ class MitmProxyManager:
                 print(f"❌ Mitmproxy version check failed: {result.stderr}")
                 return False
         except FileNotFoundError:
-            print("❌ Mitmproxy not found in PATH")
-            print("\n📝 Installation commands:")
-            print("   pip3 install mitmproxy")
-            print("   or: brew install mitmproxy")
+            print("❌ Mitmproxy not found. Ensure it's installed in the current venv or set MITMDUMP_PATH.")
             return False
         except subprocess.TimeoutExpired:
             print("❌ Mitmproxy version check timed out")
             return False
-            
+        
         # Check if warp_proxy_script.py exists
         if os.path.exists(self.script_path):
             print(f"✅ Proxy script found: {self.script_path}")

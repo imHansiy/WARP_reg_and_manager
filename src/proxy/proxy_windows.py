@@ -6,6 +6,7 @@ Windows-specific proxy management functionality
 """
 
 import subprocess
+import os
 
 
 class WindowsProxyManager:
@@ -15,6 +16,12 @@ class WindowsProxyManager:
     def set_proxy(proxy_server):
         """Windows proxy configuration using registry like old version"""
         try:
+            # Optional: skip modifying system proxy (per-app mode)
+            skip_env = os.environ.get('WARP_PROXY_SKIP_SYSTEM_PROXY')
+            if skip_env and skip_env.strip() not in ("0", "false", "False", "no", "NO"):
+                print(f"ℹ️ Skipping system proxy setup (per-app mode enabled). Target proxy: {proxy_server}")
+                return True
+
             import winreg
             
             # Registry key opening

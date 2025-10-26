@@ -24,7 +24,7 @@ from src.proxy.proxy_linux import LinuxProxyManager
 
 # Modular components
 from src.managers.certificate_manager import CertificateManager, ManualCertificateDialog
-from src.workers.background_workers import TokenWorker, TokenRefreshWorker, AccountCreationWorker, BrowserAccountCreationWorker
+from src.workers.background_workers import TokenWorker, TokenRefreshWorker
 from src.managers.mitmproxy_manager import MitmProxyManager
 from src.ui.ui_dialogs import AddAccountDialog
 from src.utils.utils import load_stylesheet, get_os_info, is_port_open
@@ -50,10 +50,11 @@ except AttributeError:
     pass
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout,
                              QWidget, QPushButton, QTableWidget, QTableWidgetItem,
-                             QDialog, QTextEdit, QLabel, QMessageBox, QHeaderView,
-                             QProgressDialog, QAbstractItemView, QStatusBar, QMenu, QAction, QScrollArea, QComboBox)
+                             QLabel, QMessageBox, QHeaderView, QTextEdit, QLineEdit, QComboBox,
+                             QProgressDialog, QAbstractItemView, QStatusBar, QMenu, QAction, QScrollArea)
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer, QObject
 from PyQt5.QtGui import QFont
+import html
 
 
 # Proxy start worker thread
@@ -364,22 +365,10 @@ class MainWindow(QMainWindow):
         self.refresh_limits_button.setMinimumHeight(36)  # Taller modern buttons
         self.refresh_limits_button.clicked.connect(self.refresh_limits)
 
-        # Account creation button (automatic)
-        self.create_account_button = QPushButton(_('auto_add_account'))
-        self.create_account_button.setObjectName("CreateAccountButton")
-        self.create_account_button.setMinimumHeight(36)  # Taller modern buttons
-        self.create_account_button.clicked.connect(self.create_new_account)
-
-        # Browser auto-register button (moved from manual dialog to main page)
-        self.browser_auto_register_button = QPushButton(_('browser_auto_register'))
-        self.browser_auto_register_button.setObjectName("BrowserAutoRegisterButton")
-        self.browser_auto_register_button.setMinimumHeight(36)
-        self.browser_auto_register_button.clicked.connect(self.open_browser_registration_main)
+        # Removed auto-add account UI
 
         button_layout.addWidget(self.proxy_stop_button)
         button_layout.addWidget(self.add_account_button)
-        button_layout.addWidget(self.create_account_button)
-        button_layout.addWidget(self.browser_auto_register_button)
         button_layout.addWidget(self.refresh_limits_button)
         button_layout.addStretch()
 
@@ -401,7 +390,7 @@ class MainWindow(QMainWindow):
         self.table.setAlternatingRowColors(True)
         self.table.setShowGrid(False)
         self.table.verticalHeader().setVisible(False)
-        self.table.verticalHeader().setDefaultSectionSize(40)  # Taller rows for modern look
+        self.table.verticalHeader().setDefaultSectionSize(52)  # Taller rows to fit centered 28px button cleanly
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setFocusPolicy(Qt.NoFocus)
@@ -416,11 +405,141 @@ class MainWindow(QMainWindow):
         header.setSectionResizeMode(1, QHeaderView.Stretch)  # Email column should stretch
         header.setSectionResizeMode(2, QHeaderView.ResizeToContents)  # Status column
         header.setSectionResizeMode(3, QHeaderView.ResizeToContents)  # Limit column
+        # Ensure the first column is wide enough for the button
+        try:
+            self.table.setColumnWidth(0, 160)
+        except Exception:
+            pass
+        # Keep activation column containers centered when user resizes columns
+        try:
+            header.sectionResized.connect(lambda idx, old, new: self._adjust_activation_column_layout() if idx == 0 else None)
+        except Exception:
+            pass
         # header.setFixedHeight(40)  # Higher modern header
 
         layout.addWidget(self.table)
 
+        # Embedded log panel on main page
+        controls = QHBoxLayout()
+        self.log_level_combo = QComboBox()
+        self.log_level_combo.addItems(['ALL','INFO','WARN','ERROR','DEBUG'])
+        self.log_level_combo.setCurrentText('ALL')
+        self.log_filter_edit = QLineEdit()
+        self.log_filter_edit.setPlaceholderText('Filter text...')
+        self.log_copy_btn = QPushButton('Copy')
+        self.log_clear_btn = QPushButton('Clear')
+        self.log_copy_btn.clicked.connect(self._copy_logs)
+        self.log_clear_btn.clicked.connect(self._clear_logs)
+        self.log_level_combo.currentTextChanged.connect(lambda _: self._apply_log_filter())
+        self.log_filter_edit.textChanged.connect(lambda _: self._apply_log_filter())
+        controls.addWidget(QLabel('Level'))
+        controls.addWidget(self.log_level_combo)
+        controls.addWidget(self.log_filter_edit)
+        controls.addStretch(1)
+        controls.addWidget(self.log_copy_btn)
+        controls.addWidget(self.log_clear_btn)
+        layout.addLayout(controls)
+
+        self.log_text = QTextEdit()
+        self.log_text.setReadOnly(True)
+        self.log_text.setMinimumHeight(220)
+        self.log_text.setFont(QFont('Consolas', 10))
+        layout.addWidget(self.log_text)
+
+        # buffer for logs
+        self.proxy_logs = []  # list of (level, text)
+
         central_widget.setLayout(layout)
+
+    def ensure_log_visible(self):
+        try:
+            self.log_text.setFocus()
+        except Exception:
+            pass
+
+    def _classify_level(self, line: str) -> str:
+        l = line.lower()
+        if 'error' in l or '❌' in line or 'failed' in l:
+            return 'ERROR'
+        if 'warn' in l or '⚠' in line:
+            return 'WARN'
+        if 'debug' in l or l.startswith('[debug'):
+            return 'DEBUG'
+        return 'INFO'
+
+    def append_proxy_log(self, line: str):
+        try:
+            level = self._classify_level(line)
+            self.proxy_logs.append((level, line))
+            if self._passes_filter(level, line):
+                color = {
+                    'ERROR': '#f38ba8',
+                    'WARN': '#f9e2af',
+                    'DEBUG': '#a6adc8',
+                    'INFO': '#cdd6f4'
+                }[level]
+                safe = html.escape(line)
+                self.log_text.append(f"<span style='color:{color}'>[{level}] {safe}</span>")
+                self.log_text.moveCursor(self.log_text.textCursor().End)
+                if self.log_text.blockCount() > 2000:
+                    self.log_text.clear()
+                    # re-apply filter to show last window
+                    self._apply_log_filter()
+        except Exception:
+            pass
+
+    def _passes_filter(self, level: str, line: str) -> bool:
+        lv = self.log_level_combo.currentText() if hasattr(self, 'log_level_combo') else 'ALL'
+        if lv != 'ALL' and level != lv:
+            return False
+        kw = self.log_filter_edit.text() if hasattr(self, 'log_filter_edit') else ''
+        if kw and kw.lower() not in line.lower():
+            return False
+        return True
+
+    def _apply_log_filter(self):
+        try:
+            self.log_text.clear()
+            for lvl, ln in self.proxy_logs:
+                if self._passes_filter(lvl, ln):
+                    color = {
+                        'ERROR': '#f38ba8',
+                        'WARN': '#f9e2af',
+                        'DEBUG': '#a6adc8',
+                        'INFO': '#cdd6f4'
+                    }[lvl]
+                    safe = html.escape(ln)
+                    self.log_text.append(f"<span style='color:{color}'>[{lvl}] {safe}</span>")
+            self.log_text.moveCursor(self.log_text.textCursor().End)
+        except Exception:
+            pass
+
+    def _copy_logs(self):
+        try:
+            text = self.log_text.toPlainText()
+            QApplication.clipboard().setText(text)
+        except Exception:
+            pass
+
+    def _clear_logs(self):
+        try:
+            self.proxy_logs.clear()
+            self.log_text.clear()
+        except Exception:
+            pass
+
+    def _adjust_activation_column_layout(self):
+        """Ensure activation button containers fill column width for proper centering."""
+        try:
+            col_w = self.table.columnWidth(0)
+            rows = self.table.rowCount()
+            for r in range(rows):
+                w = self.table.cellWidget(r, 0)
+                if w:
+                    w.setMinimumWidth(col_w)
+                    w.setMaximumWidth(col_w)
+        except Exception:
+            pass
 
     def load_accounts(self, preserve_limits=False):
         """Load accounts to table"""
@@ -432,8 +551,11 @@ class MainWindow(QMainWindow):
         for row, (email, account_json, health_status, limit_info) in enumerate(accounts):
             # Activation button (Column 0) - Dark theme compatible
             activation_button = QPushButton()
-            activation_button.setFixedSize(75, 20)  # Larger size to better fill cell
             activation_button.setObjectName("activationButton")
+            # Size and style for readability
+            activation_button.setMinimumWidth(84)
+            activation_button.setFixedHeight(28)
+            activation_button.setStyleSheet("padding: 4px 10px; margin: 0; font-size: 12px; min-height: 24px; max-height: 28px;")
             
             # Set button state
             is_active = (email == active_account)
@@ -452,7 +574,29 @@ class MainWindow(QMainWindow):
 
             # Connect button click handler
             activation_button.clicked.connect(lambda checked, e=email: self.toggle_account_activation(e))
-            self.table.setCellWidget(row, 0, activation_button)
+
+            # Center the button inside the cell using a container widget
+            container = QWidget()
+            from PyQt5.QtWidgets import QHBoxLayout
+            from PyQt5.QtWidgets import QSizePolicy
+            container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            container_layout = QHBoxLayout(container)
+            container_layout.setContentsMargins(6, 0, 6, 0)  # small symmetric margins
+            container_layout.setSpacing(0)
+            container_layout.setAlignment(Qt.AlignCenter)
+            container_layout.addWidget(activation_button)
+            self.table.setCellWidget(row, 0, container)
+
+            # Ensure row height fits the button nicely
+            self.table.setRowHeight(row, 52)
+
+            # Force container to fill the entire cell width for perfect centering
+            try:
+                col_w = self.table.columnWidth(0)
+                container.setMinimumWidth(col_w)
+                container.setMaximumWidth(col_w)
+            except Exception:
+                pass
 
             # Email (Column 1)
             email_item = QTableWidgetItem(email)
@@ -630,297 +774,6 @@ class MainWindow(QMainWindow):
                 else:
                     self.status_bar.showMessage(f"{_('error')}: {message}", 5000)
 
-    def create_new_account(self):
-        """Create new account"""
-        try:
-            print("🔧 Starting new account creation procedure...")
-            
-            # Check availability of required dependencies
-            try:
-                import curl_cffi
-                import bs4
-                # Dependencies available - start creation process
-                self._start_account_creation()
-            except ImportError as ie:
-                print(f"Import error: {ie}")
-                self._show_dependency_error(str(ie))
-                return
-            
-        except Exception as e:
-            print(f"Account creation error: {e}")
-            self.status_bar.showMessage(f"Error: {str(e)}", 5000)
-    
-    def create_new_account_with_browser(self):
-        """Create new account using browser"""
-        try:
-            print("🔧 Starting new account creation procedure with browser...")
-            
-            # Check availability of required dependencies
-            try:
-                import playwright
-                # Dependencies available - start browser creation process
-                self._start_account_creation_with_browser()
-            except ImportError as ie:
-                print(f"Import error: {ie}")
-                self._show_browser_dependency_error(str(ie))
-                return
-            
-        except Exception as e:
-            print(f"Browser account creation error: {e}")
-            self.status_bar.showMessage(f"Error: {str(e)}", 5000)
-    
-    def _start_account_creation(self):
-        """Start account creation process"""
-        # Show progress dialog
-        self.create_progress_dialog = QProgressDialog(
-            "Creating temporary email...",
-            "Cancel",
-            0, 0, self
-        )
-        self.create_progress_dialog.setWindowModality(Qt.WindowModal)
-        self.create_progress_dialog.show()
-        
-        # Start worker in separate thread
-        self.account_creation_worker = AccountCreationWorker(self.account_manager)
-        self.account_creation_worker.progress.connect(self._update_creation_progress)
-        self.account_creation_worker.finished.connect(self._creation_finished)
-        self.account_creation_worker.error.connect(self._creation_error)
-        self.account_creation_worker.start()
-        
-        # Disable buttons
-        self.create_account_button.setEnabled(False)
-        self.add_account_button.setEnabled(False)
-    
-    def _start_account_creation_with_browser(self):
-        """Start browser-based account creation process"""
-        # Show progress dialog
-        self.create_browser_progress_dialog = QProgressDialog(
-            "Launching browser for account creation...",
-            "Cancel",
-            0, 0, self
-        )
-        self.create_browser_progress_dialog.setWindowModality(Qt.WindowModal)
-        self.create_browser_progress_dialog.show()
-        
-        # Start browser worker in separate thread
-        self.browser_account_creation_worker = BrowserAccountCreationWorker(self.account_manager)
-        self.browser_account_creation_worker.progress.connect(self._update_browser_creation_progress)
-        self.browser_account_creation_worker.finished.connect(self._browser_creation_finished)
-        self.browser_account_creation_worker.error.connect(self._browser_creation_error)
-        self.browser_account_creation_worker.start()
-        
-        # Disable buttons
-        self.create_account_button.setEnabled(False)
-        self.add_account_button.setEnabled(False)
-    
-    def _show_dependency_error(self, error_details: str = ""):
-        """Show missing dependencies error"""
-        error_message = "Required dependencies are missing for auto account creation."
-        if "curl_cffi" in error_details:
-            error_message += "\n\nMissing: curl_cffi"
-        if "bs4" in error_details or "beautifulsoup" in error_details.lower():
-            error_message += "\n\nMissing: beautifulsoup4"
-            
-        QMessageBox.warning(
-            self,
-            "Missing Dependencies",
-            error_message + "\n\nPlease install dependencies:\n\n"
-            "pip install -r requirements.txt\n\n"
-            "Then restart the application."
-        )
-        self.status_bar.showMessage("❌ Missing dependencies for auto creation", 5000)
-    
-    def _show_browser_dependency_error(self, error_details: str = ""):
-        """Show missing browser dependencies error"""
-        error_message = "Required dependencies are missing for browser-based auto account creation."
-        if "playwright" in error_details:
-            error_message += "\n\nMissing: playwright"
-            
-        QMessageBox.warning(
-            self,
-            "Missing Browser Dependencies",
-            error_message + "\n\nPlease install dependencies:\n\n"
-            "pip install -r requirements.txt\n\n"
-            "Then restart the application."
-        )
-        self.status_bar.showMessage("❌ Missing browser dependencies for auto creation", 5000)
-    
-    def _update_creation_progress(self, message):
-        """Update account creation progress"""
-        if hasattr(self, 'create_progress_dialog'):
-            self.create_progress_dialog.setLabelText(message)
-    
-    def _update_browser_creation_progress(self, message):
-        """Update browser account creation progress"""
-        if hasattr(self, 'create_browser_progress_dialog'):
-            self.create_browser_progress_dialog.setLabelText(message)
-    
-    def _creation_finished(self, result):
-        """Account creation completion"""
-        if hasattr(self, 'create_progress_dialog'):
-            self.create_progress_dialog.close()
-        
-        # Enable buttons
-        self.create_account_button.setEnabled(True)
-        self.add_account_button.setEnabled(True)
-        
-        if result and 'email' in result:
-            email = result['email']
-            
-            # Check if account was saved to database
-            if result.get('saved_to_database', False):
-                self.status_bar.showMessage(f"✅ Account created and saved: {email}", 5000)
-                # Reload accounts table to show new account immediately
-                self.load_accounts()
-                
-                # Show result to user
-                QMessageBox.information(
-                    self,
-                    "Account Created Successfully",
-                    f"✅ Warp.dev account created and added to database:\n\n{email}\n\nThe account is now available in your accounts list."
-                )
-            else:
-                # Account created but check if there's database save error or if it's old implementation
-                if result.get('save_message'):
-                    self.status_bar.showMessage(f"⚠️ Account created but not saved: {email}", 5000)
-                    QMessageBox.warning(
-                        self,
-                        "Account Created",
-                        f"Account created: {email}\n\n⚠️ However, it was not saved to the database.\n\nError: {result.get('save_message', 'Unknown error')}"
-                    )
-                else:
-                    # Old implementation - just temporary email created
-                    self.status_bar.showMessage(f"✅ Temporary email created: {email}", 5000)
-                    
-                    # Show result to user
-                    QMessageBox.information(
-                        self,
-                        "Account Created",
-                        f"Account successfully created\n✅ {email}\n"
-                    )
-            
-        else:
-            self.status_bar.showMessage("❌ Failed to create account", 5000)
-        
-        # Clear worker
-        self.account_creation_worker = None
-    
-    def _browser_creation_finished(self, result):
-        """Browser account creation completion"""
-        if hasattr(self, 'create_browser_progress_dialog'):
-            self.create_browser_progress_dialog.close()
-        
-        # Enable buttons
-        self.create_account_button.setEnabled(True)
-        self.add_account_button.setEnabled(True)
-        
-        if result and 'email' in result:
-            email = result['email']
-            
-            # Check if account was saved to database
-            if result.get('saved_to_database', False):
-                self.status_bar.showMessage(f"✅ Browser account created and saved: {email}", 5000)
-                # Reload accounts table to show new account immediately
-                self.load_accounts()
-                
-                # Show result to user
-                QMessageBox.information(
-                    self,
-                    "Browser Account Created Successfully",
-                    f"✅ Warp.dev account created via browser and added to database:\n\n{email}\n\nThe account is now available in your accounts list."
-                )
-            else:
-                # Account created but check if there's database save error
-                if result.get('save_message'):
-                    self.status_bar.showMessage(f"⚠️ Browser account created but not saved: {email}", 5000)
-                    QMessageBox.warning(
-                        self,
-                        "Browser Account Created",
-                        f"Account created via browser: {email}\n\n⚠️ However, it was not saved to the database.\n\nError: {result.get('save_message', 'Unknown error')}"
-                    )
-                else:
-                    # Just temporary email created via browser
-                    self.status_bar.showMessage(f"✅ Temporary browser email created: {email}", 5000)
-                    
-                    # Show result to user
-                    QMessageBox.information(
-                        self,
-                        "Browser Account Created",
-                        f"Account successfully created via browser\n✅ {email}\n"
-                    )
-            
-        else:
-            self.status_bar.showMessage("❌ Failed to create browser account", 5000)
-        
-        # Clear worker
-        self.browser_account_creation_worker = None
-    
-    def _creation_error(self, error_message):
-        """Account creation error"""
-        if hasattr(self, 'create_progress_dialog'):
-            self.create_progress_dialog.close()
-        
-        # Enable buttons
-        self.create_account_button.setEnabled(True)
-        self.add_account_button.setEnabled(True)
-        
-        # Check if it's a proxy error and show appropriate message
-        if "Proxy Error:" in error_message:
-            proxy_msg = error_message.replace("Proxy Error: ", "")
-            QMessageBox.warning(
-                self,
-                "Proxy Connection Error",
-                f"Failed to create account due to proxy issues:\n\n{proxy_msg}\n\n"
-                "💡 Suggestions:\n"
-                "• Check if proxy.txt contains valid proxies\n"
-                "• Try running without proxy (empty proxy.txt)\n"
-                "• Verify proxy authentication settings"
-            )
-            self.status_bar.showMessage(f"❌ Proxy error: {proxy_msg}", 8000)
-        else:
-            # General error handling
-            QMessageBox.critical(
-                self,
-                "Account Creation Error",
-                f"Failed to create account:\n\n{error_message}"
-            )
-            self.status_bar.showMessage(f"❌ Error: {error_message}", 5000)
-        
-        self.account_creation_worker = None
-    
-    def _browser_creation_error(self, error_message):
-        """Browser account creation error"""
-        if hasattr(self, 'create_browser_progress_dialog'):
-            self.create_browser_progress_dialog.close()
-        
-        # Enable buttons
-        self.create_account_button.setEnabled(True)
-        self.add_account_button.setEnabled(True)
-        
-        # Check if it's a browser error and show appropriate message
-        if "Browser Error:" in error_message:
-            browser_msg = error_message.replace("Browser Error: ", "")
-            QMessageBox.warning(
-                self,
-                "Browser Connection Error",
-                f"Failed to create account via browser due to issues:\n\n{browser_msg}\n\n"
-                "💡 Suggestions:\n"
-                "• Check if fingerprint-chromium browser is properly installed\n"
-                "• Try restarting the application\n"
-                "• Verify browser configuration"
-            )
-            self.status_bar.showMessage(f"❌ Browser error: {browser_msg}", 8000)
-        else:
-            # General error handling
-            QMessageBox.critical(
-                self,
-                "Browser Account Creation Error",
-                f"Failed to create account via browser:\n\n{error_message}"
-            )
-            self.status_bar.showMessage(f"❌ Browser Error: {error_message}", 5000)
-        
-        self.browser_account_creation_worker = None
-
     def refresh_limits(self):
         """Update limits"""
         accounts = self.account_manager.get_accounts_with_health()
@@ -943,7 +796,6 @@ class MainWindow(QMainWindow):
         # Disable buttons
         self.refresh_limits_button.setEnabled(False)
         self.add_account_button.setEnabled(False)
-        self.create_account_button.setEnabled(False)
 
     def update_progress(self, value, text):
         """Update progress"""
@@ -960,7 +812,6 @@ class MainWindow(QMainWindow):
         # Activate buttons
         self.refresh_limits_button.setEnabled(True)
         self.add_account_button.setEnabled(True)
-        self.create_account_button.setEnabled(True)
 
         self.status_bar.showMessage(_('accounts_updated', len(results)), 3000)
 
@@ -969,7 +820,6 @@ class MainWindow(QMainWindow):
         self.progress_dialog.close()
         self.refresh_limits_button.setEnabled(True)
         self.add_account_button.setEnabled(True)
-        self.create_account_button.setEnabled(True)
         self.status_bar.showMessage(f"{_('error')}: {error_message}", 5000)
 
     def start_proxy_and_activate_account(self, email):
@@ -1082,6 +932,11 @@ class MainWindow(QMainWindow):
             self.proxy_progress.setWindowModality(Qt.WindowModal)
             self.proxy_progress.show()
             QApplication.processEvents()
+            # Bring embedded log into focus
+            try:
+                self.ensure_log_visible()
+            except Exception:
+                pass
 
             # Start proxy in background thread
             self.proxy_worker = ProxyStartWorker(self.proxy_manager, parent_window=self)
@@ -1142,6 +997,9 @@ class MainWindow(QMainWindow):
 
                 # Update table in background to avoid blocking
                 QTimer.singleShot(100, lambda: self.load_accounts())
+
+                # Auto-select an active account if none is set
+                QTimer.singleShot(200, self._auto_select_active_account_if_needed)
 
                 self.status_bar.showMessage(f"Proxy started: {proxy_url}", 5000)
                 print("Proxy successfully started!")
@@ -1287,6 +1145,20 @@ class MainWindow(QMainWindow):
                 self.status_bar.showMessage("Account activation failed", 3000)
         except Exception as e:
             self.status_bar.showMessage(f"Account activation error: {str(e)}", 5000)
+
+    def _auto_select_active_account_if_needed(self):
+        """If no active account is set, pick the first healthy one automatically."""
+        try:
+            active = self.account_manager.get_active_account()
+            if active:
+                return
+            accounts = self.account_manager.get_accounts_with_health()
+            for email, _, health in accounts:
+                if health != 'banned':
+                    self.activate_account(email)
+                    break
+        except Exception:
+            pass
 
 
     def fetch_and_save_user_settings(self, email):
@@ -2171,62 +2043,7 @@ class MainWindow(QMainWindow):
         import webbrowser
         webbrowser.open("https://t.me/D3vin_chat")
 
-    def open_login_page(self):
-        """Open the login page in the fingerprint-chromium browser with a new profile."""
-        import tempfile
-        import uuid
 
-        browser_executable_path = Path("bin/fingerprint-chromium/chrome.exe")
-        if not browser_executable_path.exists():
-            QMessageBox.warning(
-                self,
-                "Browser Not Found",
-                f"fingerprint-chromium not found at: {browser_executable_path}\n\nPlease run the browser-based account creation first to download it.",
-            )
-            return
-
-        try:
-            # Create a new temporary user data directory for a fresh profile
-            user_data_dir = Path(tempfile.gettempdir()) / f"warp_reg_profile_{uuid.uuid4()}"
-            user_data_dir.mkdir(parents=True, exist_ok=True)
-            
-            command = [
-                str(browser_executable_path),
-                f"--user-data-dir={str(user_data_dir)}",
-                "https://app.warp.dev/login"
-            ]
-            
-            subprocess.Popen(command)
-            
-        except Exception as e:
-            QMessageBox.critical(
-                self, "Error", f"Failed to launch browser: {e}"
-            )
-
-    def open_browser_registration_main(self):
-        """Run browser-based automated registration from main window (moved from manual dialog)."""
-        try:
-            # TODO: Move API Key to a secure config file
-            API_KEY = "mk_Xm1-2eoYCeYqhogQ0KagCy2E0vJX-BHm"
-
-            from src.utils.browser_warp_registration import register_warp_account_with_browser
-            import asyncio
-
-            self.browser_auto_register_button.setEnabled(False)
-            self.browser_auto_register_button.setText(_('registration_in_progress'))
-
-            loop = asyncio.get_event_loop()
-            result = loop.run_until_complete(register_warp_account_with_browser(API_KEY))
-
-            if result and result.get("status") == "success":
-                QMessageBox.information(self, _('success'), _('browser_registration_process_finished'))
-            else:
-                QMessageBox.critical(self, _('error'), _('registration_failed'))
-        except Exception as e:
-            QMessageBox.critical(self, _('error'), f"{_('registration_failed')}: {e}")
-        finally:
-            self.browser_auto_register_button.setEnabled(True)
-            self.browser_auto_register_button.setText(_('browser_auto_register'))
 
     def refresh_ui_texts(self):
         """Update UI texts to English"""

@@ -11,7 +11,6 @@ from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QWidget, QPushBu
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QFont
 from src.config.languages import _
-from src.utils.browser_warp_registration import register_warp_account_with_browser
 import asyncio
 from PyQt5.QtWidgets import QMessageBox
 
@@ -226,30 +225,6 @@ class AddAccountDialog(QDialog):
         """Open account creation page"""
         webbrowser.open("https://app.warp.dev/login/")
 
-    def open_browser_registration(self):
-        """
-        Starts the browser-based automated registration process directly.
-        """
-        # TODO: Move API Key to a secure config file
-        API_KEY = "mk_Xm1-2eoYCeYqhogQ0KagCy2E0vJX-BHm"
-
-        try:
-            self.browser_register_button.setEnabled(False)
-            self.browser_register_button.setText(_('registration_in_progress'))
-            
-            loop = asyncio.get_event_loop()
-            result = loop.run_until_complete(register_warp_account_with_browser(API_KEY))
-            
-            if result and result.get("status") == "success":
-                QMessageBox.information(self, _('success'), _('browser_registration_process_finished'))
-            else:
-                QMessageBox.critical(self, _('error'), _('registration_failed'))
-
-        except Exception as e:
-            QMessageBox.critical(self, _('error'), f"{_('registration_failed')}: {e}")
-        finally:
-            self.browser_register_button.setEnabled(True)
-            self.browser_register_button.setText(_('browser_auto_register'))
 
     def get_json_data(self):
         """Get JSON data from text edit"""

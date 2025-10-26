@@ -3,3 +3,5 @@ bin/
 参考项目/
 *.pyc
 accounts.db
+*.err
+*.log
