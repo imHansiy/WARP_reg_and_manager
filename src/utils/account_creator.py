@@ -6,17 +6,16 @@ import json
 import logging
 import os
 from typing import Optional, Dict, Any
-from src.managers.temp_email_manager import check_if_email_valid, check_email_for_code
+# IMAP helper functions removed; temp email/browser flows are preferred
 from src.utils.warp_registration import WarpRegistrationManager
 
 
 class AutoAccountCreator:
     """Automatic Warp.dev account creator with IMAP email verification"""
     
-    def __init__(self, email_file: str = "emails.txt", proxy_file: str = "proxy.txt", config_file: str = "config.yaml"):
+    def __init__(self, email_file: str = "emails.txt", proxy_file: str = "proxy.txt"):
         self.email_file = email_file
         self.proxy_file = proxy_file
-        self.config_file = config_file
         self.max_wait_time = 60  # Maximum wait time for email in seconds
         self.check_interval = 5   # Check email every 5 seconds
         
@@ -27,8 +26,7 @@ class AutoAccountCreator:
         """Validate that required files exist"""
         if not os.path.exists(self.email_file):
             raise FileNotFoundError(f"Email file not found: {self.email_file}")
-        if not os.path.exists(self.config_file):
-            logging.warning(f"Config file not found: {self.config_file}, using defaults")
+        # IMAP config removed; proceed without config.yaml
         
     def _is_proxy_error(self, error_msg: str) -> bool:
         """Check if error is related to proxy issues"""
@@ -149,69 +147,17 @@ class AutoAccountCreator:
         return result
     
     async def _setup_email_connection(self) -> Optional[Dict[str, Any]]:
-        """Setup email connection using IMAP with config.yaml server detection"""
+        """Setup email connection: IMAP flow removed; return None to skip."""
         try:
-            # Read first email from file for validation
-            if not os.path.exists(self.email_file):
-                raise FileNotFoundError(f"Email file not found: {self.email_file}")
-                
-            with open(self.email_file, 'r', encoding='utf-8') as f:
-                lines = f.readlines()
-                
-            for line in lines:
-                line = line.strip()
-                if not line or line.startswith('#') or ':' not in line:
-                    continue
-                    
-                email, password = line.split(':', 1)
-                email = email.strip()
-                password = password.strip()
-                
-                # Test email connection using config.yaml
-                is_valid = await check_if_email_valid(email, password, self.config_file)
-                if is_valid:
-                    return {
-                        'email': email,
-                        'password': password,
-                        'service': 'imap'
-                    }
-                    
-            raise Exception("No valid email accounts found in emails.txt")
-            
-        except Exception as e:
-            error_msg = str(e)
-            print(f"❌ Error setting up email: {error_msg}")
-            logging.error(f"Error setting up email: {e}")
+            return None
+        except Exception:
             return None
     
     async def _wait_for_verification_email_imap(self, email: str) -> Optional[str]:
-        """Wait for verification email using IMAP and extract oob code"""
+        """IMAP polling removed; return None to force alternate flows."""
         try:
-            # Get email credentials from setup
-            if not os.path.exists(self.email_file):
-                raise FileNotFoundError(f"Email file not found: {self.email_file}")
-                
-            with open(self.email_file, 'r', encoding='utf-8') as f:
-                lines = f.readlines()
-                
-            for line in lines:
-                line = line.strip()
-                if not line or line.startswith('#') or ':' not in line:
-                    continue
-                    
-                file_email, password = line.split(':', 1)
-                file_email = file_email.strip()
-                password = password.strip()
-                
-                if file_email == email:
-                    # Use the updated function with config.yaml
-                    return await check_email_for_code(email, password, max_attempts=8, delay_seconds=3, config_file=self.config_file)
-                    
-            raise Exception(f"Email {email} not found in emails.txt")
-            
-        except Exception as e:
-            print(f"❌ Error waiting for email: {e}")
-            logging.error(f"Error waiting for email: {e}")
+            return None
+        except Exception:
             return None
     
     def _get_proxy_error_message(self, error_msg: str) -> str:
@@ -289,7 +235,7 @@ class AutoAccountCreator:
 
 async def create_warp_account_automatically(proxy_file: str = "proxy.txt") -> Optional[Dict[str, Any]]:
     """Convenience function to create Warp account automatically"""
-    creator = AutoAccountCreator(email_file="emails.txt", proxy_file=proxy_file, config_file="config.yaml")
+    creator = AutoAccountCreator(email_file="emails.txt", proxy_file=proxy_file)
     return await creator.create_account()
 
 
