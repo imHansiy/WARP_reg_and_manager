@@ -304,6 +304,8 @@ class MainWindow(QMainWindow):
         # Variables for token worker
         self.token_worker = None
         self.token_progress_dialog = None
+        # One-click launch control
+        self.one_click_launch_warp = False
 
 
 
@@ -786,6 +788,14 @@ class MainWindow(QMainWindow):
             # If proxy is active, just activate; otherwise start and activate
             if self.proxy_enabled:
                 self.activate_account(selected)
+                # If one-click requested launch, open Warp now
+                if getattr(self, 'one_click_launch_warp', False):
+                    try:
+                        if hasattr(self, '_launch_warp_terminal'):
+                            self._launch_warp_terminal()
+                    except Exception:
+                        pass
+                    self.one_click_launch_warp = False
                 try:
                     self.one_click_button.setEnabled(True)
                 except Exception:
@@ -890,21 +900,45 @@ class MainWindow(QMainWindow):
                 # Activate account
                 self.activate_account(self.activating_email)
 
+                # If one-click requested launch, open Warp now
+                if getattr(self, 'one_click_launch_warp', False):
+                    try:
+                        if hasattr(self, '_launch_warp_terminal'):
+                            self._launch_warp_terminal()
+                    except Exception:
+                        pass
+                    self.one_click_launch_warp = False
+
                 self.proxy_progress.close()
 
                 self.status_bar.showMessage(_('proxy_started_account_activated').format(self.activating_email), 5000)
                 print(f"Proxy successfully started and {self.activating_email} activated!")
+                # Re-enable one-click button if present
+                try:
+                    self.one_click_button.setEnabled(True)
+                except Exception:
+                    pass
                 return True
             else:
                 print("Failed to configure Windows proxy")
                 self.proxy_manager.stop()
                 self.status_bar.showMessage(_('windows_proxy_config_failed'), 5000)
+                # Re-enable one-click button if present
+                try:
+                    self.one_click_button.setEnabled(True)
+                except Exception:
+                    pass
                 return False
         except Exception as e:
             if hasattr(self, 'proxy_progress'):
                 self.proxy_progress.close()
             print(f"Proxy config error: {e}")
             self.status_bar.showMessage(_('proxy_start_error').format(str(e)), 5000)
+            # Re-enable one-click button if present
+            try:
+                self.one_click_button.setEnabled(True)
+            except Exception:
+                pass
             return False
 
     def start_proxy(self):
@@ -1028,6 +1062,13 @@ class MainWindow(QMainWindow):
 
             # Update table
             self.load_accounts(preserve_limits=True)
+
+            # Always re-enable one-click button and clear pending state
+            try:
+                self.one_click_pending = False
+                self.one_click_button.setEnabled(True)
+            except Exception:
+                pass
 
             self.status_bar.showMessage(_('proxy_stopped'), 3000)
         except Exception as e:
@@ -2097,6 +2138,73 @@ class MainWindow(QMainWindow):
         except Exception:
             return None
 
+    def _launch_warp_terminal(self):
+        """Launch Warp.exe with proxy env pointing to local mitmproxy (Windows only)."""
+        try:
+            if sys.platform != 'win32':
+                return
+            # Avoid launching if already running
+            try:
+                for p in psutil.process_iter(['name']):
+                    if (p.info.get('name') or '').lower() == 'warp.exe':
+                        return
+            except Exception:
+                pass
+            # Build candidate paths
+            env = os.environ
+            candidates = []
+            def add(p):
+                if p and os.path.exists(p):
+                    candidates.append(p)
+            # 1) PATH lookup
+            try:
+                from shutil import which
+                wp = which('Warp.exe') or which('warp.exe') or which('warp')
+                if wp:
+                    add(wp)
+            except Exception:
+                pass
+            # 2) Common install paths
+            add(os.path.join(env.get('LOCALAPPDATA',''), 'Programs', 'Warp', 'Warp.exe'))
+            add(os.path.join(env.get('PROGRAMFILES',''), 'Warp', 'Warp.exe'))
+            add(os.path.join(env.get('PROGRAMFILES(X86)',''), 'Warp', 'Warp.exe'))
+            add(os.path.join(env.get('USERPROFILE',''), 'AppData', 'Local', 'Programs', 'Warp', 'Warp.exe'))
+            add(os.path.join(env.get('USERPROFILE',''), 'scoop', 'apps', 'warp', 'current', 'Warp.exe'))
+            # 3) WindowsApps (best-effort)
+            try:
+                wa = os.path.join(env.get('PROGRAMFILES',''), 'WindowsApps')
+                if os.path.isdir(wa):
+                    for name in os.listdir(wa):
+                        if 'Warp' in name or 'warp' in name:
+                            pth = os.path.join(wa, name, 'Warp.exe')
+                            if os.path.exists(pth):
+                                add(pth)
+                                break
+            except Exception:
+                pass
+            if not candidates:
+                try:
+                    self.status_bar.showMessage('未找到 Warp.exe，已跳过自动启动', 5000)
+                except Exception:
+                    pass
+                return
+            warp_path = candidates[0]
+            # Prepare environment with proxy
+            proxy = f"http://{self.proxy_manager.get_proxy_url()}"
+            child_env = os.environ.copy()
+            child_env['http_proxy'] = proxy
+            child_env['https_proxy'] = proxy
+            child_env['HTTP_PROXY'] = proxy
+            child_env['HTTPS_PROXY'] = proxy
+            child_env['no_proxy'] = 'localhost,127.0.0.1,::1,.local'
+            child_env['NO_PROXY'] = 'localhost,127.0.0.1,::1,.local'
+            subprocess.Popen([warp_path], env=child_env)
+        except Exception as e:
+            try:
+                self.status_bar.showMessage(f'启动 Warp 失败: {e}', 5000)
+            except Exception:
+                pass
+
     def one_click_start(self):
         """One-click: refresh limits then start proxy and activate a usable account."""
         try:
@@ -2107,9 +2215,11 @@ class MainWindow(QMainWindow):
                 pass
             # Mark flow and trigger refresh
             self.one_click_pending = True
+            self.one_click_launch_warp = True
             self.refresh_limits()
         except Exception as e:
             self.one_click_pending = False
+            self.one_click_launch_warp = False
             try:
                 self.one_click_button.setEnabled(True)
             except Exception:
