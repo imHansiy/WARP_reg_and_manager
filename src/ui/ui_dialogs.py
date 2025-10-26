@@ -94,6 +94,16 @@ class AddAccountDialog(QDialog):
         self.text_edit.setPlaceholderText(_('add_account_placeholder'))
         left_panel.addWidget(self.text_edit)
 
+        # Paste from clipboard row
+        paste_row = QHBoxLayout()
+        paste_row.setSpacing(8)
+        self.paste_button = QPushButton(_('paste_from_clipboard'))
+        self.paste_button.setMinimumHeight(26)
+        self.paste_button.clicked.connect(self.paste_from_clipboard)
+        paste_row.addWidget(self.paste_button)
+        paste_row.addStretch()
+        left_panel.addLayout(paste_row)
+
         # Info button
         self.info_button = QPushButton(_('how_to_get_json'))
         self.info_button.setMaximumWidth(220)
@@ -220,6 +230,24 @@ class AddAccountDialog(QDialog):
         except Exception as e:
             self.copy_button.setText(_('copy_error'))
             QTimer.singleShot(2000, lambda: self.copy_button.setText(_('copy_javascript')))
+
+    def paste_from_clipboard(self):
+        """Paste JSON from clipboard into the text editor"""
+        try:
+            clipboard = QApplication.clipboard()
+            text = clipboard.text() or ''
+            if text:
+                self.text_edit.setPlainText(text.strip())
+                # Move cursor to end
+                cursor = self.text_edit.textCursor()
+                cursor.movePosition(cursor.End)
+                self.text_edit.setTextCursor(cursor)
+                self.text_edit.setFocus()
+            else:
+                # Optional: brief info if clipboard empty
+                QMessageBox.information(self, _('info'), _('clipboard_empty'))
+        except Exception:
+            pass
 
     def open_account_creation_page(self):
         """Open account creation page"""

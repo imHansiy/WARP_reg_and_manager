@@ -298,6 +298,15 @@ class MainWindow(QMainWindow):
         self.status_reset_timer.setSingleShot(True)
         self.status_reset_timer.timeout.connect(self.reset_status_message)
 
+        # Clipboard watcher for auto-add accounts (event-based)
+        self._last_clipboard_text = None
+        try:
+            cb = QApplication.clipboard()
+            cb.dataChanged.connect(self.on_clipboard_changed)
+            self._clipboard = cb
+        except Exception:
+            pass
+
         # Run token check immediately on first startup
         QTimer.singleShot(0, self.auto_renew_tokens)
 
@@ -1820,6 +1829,8 @@ class MainWindow(QMainWindow):
                 print(f"✅ Active account refreshed: {email}")
                 # Update table in background to avoid blocking
                 QTimer.singleShot(100, lambda: self.load_accounts(preserve_limits=False))
+                # After a short delay, check limit and auto-switch if exhausted
+                QTimer.singleShot(200, lambda e=email: self._check_and_rotate_if_exhausted(e))
             else:
                 print(f"❌ Failed to refresh active account: {email}")
                 self.account_manager.update_account_health(email, 'unhealthy')
@@ -2102,6 +2113,55 @@ class MainWindow(QMainWindow):
 
         event.accept()
 
+    def on_clipboard_changed(self):
+        """Qt clipboard change signal handler."""
+        try:
+            self.check_clipboard_for_account_json()
+        except Exception:
+            pass
+
+    def check_clipboard_for_account_json(self):
+        """Watch clipboard and auto-add account JSON if found; skip existing emails."""
+        try:
+            from PyQt5.QtWidgets import QApplication
+            clip = QApplication.clipboard()
+            text = clip.text() or ''
+            if not text:
+                return
+            # Skip if unchanged
+            if text == getattr(self, '_last_clipboard_text', None):
+                return
+            self._last_clipboard_text = text
+            # Quick sanity check: must look like JSON
+            t = text.strip()
+            if not (t.startswith('{') and t.endswith('}')):
+                return
+            import json
+            data = json.loads(t)
+            if not isinstance(data, dict):
+                return
+            email = data.get('email')
+            stm = data.get('stsTokenManager')
+            if not (isinstance(email, str) and isinstance(stm, dict) and ('accessToken' in stm or 'refreshToken' in stm)):
+                return
+            # Check if already exists
+            try:
+                accounts = self.account_manager.get_accounts()
+                if any(e == email for e, _ in accounts):
+                    self.status_bar.showMessage(f"剪贴板检测到账户 {email}，已存在，已忽略", 3000)
+                    return
+            except Exception:
+                pass
+            # Add account
+            ok, msg = self.account_manager.add_account(t)
+            if ok:
+                self.status_bar.showMessage(f"已从剪贴板添加账户: {email}", 3000)
+                QTimer.singleShot(0, lambda: self.load_accounts(preserve_limits=True))
+            else:
+                self.status_bar.showMessage(f"添加失败: {msg}", 5000)
+        except Exception:
+            pass
+
     def _select_usable_account(self) -> Optional[str]:
         """Pick a usable account (not banned; with remaining limit if known)."""
         try:
@@ -2137,6 +2197,63 @@ class MainWindow(QMainWindow):
             return fallback_email
         except Exception:
             return None
+
+    def _parse_limit_text(self, txt: str):
+        try:
+            if not txt or '/' not in txt:
+                return None, None
+            used_s, total_s = txt.split('/', 1)
+            used = int(used_s.strip())
+            total = int(total_s.strip())
+            return used, total
+        except Exception:
+            return None, None
+
+    def _check_and_rotate_if_exhausted(self, active_email: str):
+        try:
+            # Read latest limits from DB
+            rows = self.account_manager.get_accounts_with_health_and_limits()
+            limit_text = None
+            for email, _json, _health, lim in rows:
+                if email == active_email:
+                    limit_text = lim
+                    break
+            used, total = self._parse_limit_text(limit_text)
+            if used is None or total is None or total <= 0:
+                return
+            if used < total:
+                return
+            # Exhausted -> pick next usable account
+            next_email = self._select_usable_account()
+            if next_email == active_email:
+                # If selector returned same email, try fallback to another
+                next_email = None
+                for email, _json, health, _ in rows:
+                    if email != active_email and health not in ('banned', _('status_banned_key'), _('status_banned')):
+                        next_email = email
+                        break
+            # Remove exhausted account
+            self.account_manager.delete_account(active_email)
+            # Toast removed
+            self.status_bar.showMessage(f"账户 {active_email} 已达上限，已移除并自动切换", 5000)
+            # Switch
+            if next_email:
+                if self.proxy_enabled:
+                    self.activate_account(next_email)
+                else:
+                    self.start_proxy_and_activate_account(next_email)
+            else:
+                # No account to switch to
+                self.account_manager.clear_active_account()
+                self.status_bar.showMessage("所有账户已用尽或无可用账户", 5000)
+                # Optionally stop proxy to avoid stale state
+                try:
+                    if self.proxy_enabled:
+                        self.stop_proxy()
+                except Exception:
+                    pass
+        except Exception as e:
+            print(f"Auto-rotate error: {e}")
 
     def _launch_warp_terminal(self):
         """Launch Warp.exe with proxy env pointing to local mitmproxy (Windows only)."""
