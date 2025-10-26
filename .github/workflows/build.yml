@@ -32,18 +32,19 @@ jobs:
         run: choco install upx -y
 
       - name: Build with PyInstaller (onefile, UPX compressed, lite)
+        shell: pwsh
         run: |
-          pyinstaller ^
-            --noconfirm ^
-            --clean ^
-            --onefile ^
-            --name WarpAccountManager ^
-            --paths src ^
-            --exclude-module playwright ^
-            --exclude-module playwright_stealth ^
-            --exclude-module curl_cffi ^
-            --exclude-module tests ^
-            --add-data "src/proxy/warp_proxy_script.py;src/proxy" ^
+          pyinstaller `
+            --noconfirm `
+            --clean `
+            --onefile `
+            --name WarpAccountManager `
+            --paths src `
+            --exclude-module playwright `
+            --exclude-module playwright_stealth `
+            --exclude-module curl_cffi `
+            --exclude-module tests `
+            --add-data "src/proxy/warp_proxy_script.py;src/proxy" `
             main.py
 
       - name: Prepare artifact
@@ -59,8 +60,3 @@ jobs:
           name: WarpAccountManager-win64-min-${{ github.run_number }}
           path: WarpAccountManager-win64-min.zip
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: WarpAccountManager-win64-${{ github.run_number }}
-          path: WarpAccountManager-win64.zip
