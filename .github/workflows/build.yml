@@ -10,6 +10,8 @@ on:
 jobs:
   build-windows:
     runs-on: windows-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
@@ -60,3 +62,17 @@ jobs:
           name: WarpAccountManager-win64-min-${{ github.run_number }}
           path: WarpAccountManager-win64-min.zip
 
+      - name: 发布 Release 并上传产物
+        if: ${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.run_number }}
+          name: WarpAccountManager Windows x64 (run ${{ github.run_number }})
+          body: |
+            自动构建（Run ${{ github.run_number }}）。
+            提供 Windows 单文件压缩包（PyInstaller + UPX）。
+          files: |
+            WarpAccountManager-win64-min.zip
+          draft: false
+          prerelease: false
+          generate_release_notes: true
