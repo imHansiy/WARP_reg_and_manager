@@ -14,13 +14,15 @@ from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
 from src.config.languages import _
+from src.utils.utils import get_app_root_dir
 
 
 class CertificateManager:
     """Mitmproxy certificate management"""
 
     def __init__(self):
-        self.mitmproxy_dir = Path.home() / ".mitmproxy"
+        self.mitmproxy_dir = Path(get_app_root_dir()) / ".mitmproxy"
+        self.mitmproxy_dir.mkdir(parents=True, exist_ok=True)
         self.cert_file = self.mitmproxy_dir / "mitmproxy-ca-cert.cer"
 
     def _is_admin_windows(self):

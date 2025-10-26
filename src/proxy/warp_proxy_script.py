@@ -9,6 +9,7 @@ import json
 import sqlite3
 import time
 import urllib3
+import os
 import re
 import random
 import string
@@ -94,7 +95,9 @@ def generate_experiment_id():
 
 class WarpProxyHandler:
     def __init__(self):
-        self.db_path = "accounts.db"
+        # Project root two levels up from this script: src/proxy -> project root
+        self.base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+        self.db_path = os.path.join(self.base_dir, "accounts.db")
         self.active_token = None
         self.active_email = None
         self.token_expiry = None
@@ -178,7 +181,7 @@ class WarpProxyHandler:
     def check_account_change_trigger(self):
         """Check account change trigger file"""
         try:
-            trigger_file = "account_change_trigger.tmp"
+            trigger_file = os.path.join(self.base_dir, "account_change_trigger.tmp")
             import os
 
             if os.path.exists(trigger_file):
@@ -297,7 +300,7 @@ class WarpProxyHandler:
             import time
 
             # Create ban notification file
-            ban_notification_file = "ban_notification.tmp"
+            ban_notification_file = os.path.join(self.base_dir, "ban_notification.tmp")
             with open(ban_notification_file, 'w', encoding='utf-8') as f:
                 f.write(f"{email}|{int(time.time())}")
 
@@ -309,8 +312,9 @@ class WarpProxyHandler:
         """Load user_settings.json file"""
         try:
             import os
-            if os.path.exists("user_settings.json"):
-                with open("user_settings.json", 'r', encoding='utf-8') as f:
+            settings_path = os.path.join(self.base_dir, "user_settings.json")
+            if os.path.exists(settings_path):
+                with open(settings_path, 'r', encoding='utf-8') as f:
                     self.user_settings_cache = json.load(f)
                 print("✅ user_settings.json file loaded successfully")
                 return True

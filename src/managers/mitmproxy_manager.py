@@ -36,6 +36,14 @@ class MitmProxyManager:
         project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         self.project_root = project_root
         self.script_path = os.path.join(project_root, "src", "proxy", "warp_proxy_script.py")
+        # App root for runtime files
+        try:
+            from src.utils.utils import get_app_root_dir
+            self.app_root = get_app_root_dir()
+        except Exception:
+            self.app_root = project_root
+        self.mitm_confdir = os.path.join(self.app_root, ".mitmproxy")
+        os.makedirs(self.mitm_confdir, exist_ok=True)
         self.debug_mode = False  # Use embedded console instead of external window
         self.cert_manager = CertificateManager()
         self._terminal_opened = False  # Track if terminal window was opened
@@ -76,7 +84,7 @@ class MitmProxyManager:
                 print(_('cert_creating'))
 
                 # Run short mitmproxy to create certificate
-                temp_cmd = [self.mitmdump_path, "--set", "confdir=~/.mitmproxy", "-q"]
+                temp_cmd = [self.mitmdump_path, "--set", f"confdir={self.mitm_confdir}", "-q"]
                 try:
                     if parent_window:
                         parent_window.status_bar.showMessage(_('cert_creating'), 0)
@@ -155,7 +163,7 @@ class MitmProxyManager:
                 "--listen-host", "127.0.0.1",  # IPv4 listen
                 "-p", str(self.port),
                 "-s", self.script_path,
-                "--set", "confdir=~/.mitmproxy",
+                "--set", f"confdir={self.mitm_confdir}",
                 "--set", "keep_host_header=true",    # Keep host header
                 "--set", f"console_eventlog_verbosity={console_verbosity}",
                 # Trim flow output detail to minimize noise in mitmdump stdout

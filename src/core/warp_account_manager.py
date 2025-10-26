@@ -1674,7 +1674,8 @@ class MainWindow(QMainWindow):
 
                 # File system triggers - safer approach
                 import time
-                trigger_file = "account_change_trigger.tmp"
+                from src.utils.utils import app_path
+                trigger_file = app_path("account_change_trigger.tmp")
                 try:
                     with open(trigger_file, 'w') as f:
                         f.write(str(int(time.time())))

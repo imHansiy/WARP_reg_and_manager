@@ -324,9 +324,11 @@ def comprehensive_diagnosis():
     
     # Сохранить результаты в файл
     try:
-        with open('windows_proxy_diagnosis.json', 'w', encoding='utf-8') as f:
+        from src.utils.utils import app_path
+        out_path = app_path('windows_proxy_diagnosis.json')
+        with open(out_path, 'w', encoding='utf-8') as f:
             json.dump(results, f, indent=2, ensure_ascii=False)
-        print("📁 Diagnosis results saved to: windows_proxy_diagnosis.json")
+        print(f"📁 Diagnosis results saved to: {out_path}")
     except Exception as e:
         print(f"⚠️ Failed to save results: {e}")
     

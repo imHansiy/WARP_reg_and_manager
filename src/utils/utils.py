@@ -82,6 +82,29 @@ def get_os_info():
         return LinuxProxyManager.get_os_info()
 
 
+def get_app_root_dir():
+    """Return application root directory.
+    - If frozen (PyInstaller), use directory of the executable.
+    - Else, use project root (two levels up from this file: src/utils/utils.py -> project root).
+    """
+    try:
+        import sys, os
+        if getattr(sys, 'frozen', False):
+            return os.path.dirname(sys.executable)
+        # running from source
+        return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    except Exception:
+        # Fallback to current working directory
+        import os
+        return os.getcwd()
+
+
+def app_path(*parts):
+    """Join path under application root directory."""
+    import os
+    return os.path.join(get_app_root_dir(), *parts)
+
+
 def format_file_size(size_bytes):
     """Format file size in human readable format"""
     if size_bytes == 0:
