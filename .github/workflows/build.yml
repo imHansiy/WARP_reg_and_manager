@@ -46,6 +46,7 @@ jobs:
             --exclude-module playwright_stealth `
             --exclude-module curl_cffi `
             --exclude-module tests `
+            --hidden-import psutil `
             --add-data "src/proxy/warp_proxy_script.py;src/proxy" `
             main.py
 
