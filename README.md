@@ -1,29 +1,8 @@
 # Warp 账户注册器和管理器
 
-## 📢 联系我们
-
-- **📢 频道**: [https://t.me/D3_vin](https://t.me/D3_vin) - 最新更新和发布
-- **💬 聊天**: [https://t.me/D3vin_chat](https://t.me/D3vin_chat) - 社区支持和讨论
-- **📁 GitHub**: [https://github.com/D3-vin](https://github.com/D3-vin) - 源代码和开发
-
 ![Python](https://img.shields.io/badge/Python-3.6+-blue)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 ![License](https://img.shields.io/badge/License-Educational%20Use-green)
-
-❤️ 支持项目
-如果您觉得这个项目有价值，并感谢我们为获取和分享这些见解所付出的努力，请考虑支持该项目。您的贡献有助于保持此资源的更新，并允许我们进行进一步的探索。
-
-您可以通过以下方式表示支持：
-
-加密货币：
-- **EVM:** 0xeba21af63e707ce84b76a87d0ba82140048c057e (ETH, BNB 等)
-- **TRON:** TEfECnyz5G1EkFrUqnbFcWLVdLvAgW9Raa
-- **TON:** UQCJ7KC2zxV_zKwLahaHf9jxy0vsWRcvQFie_FUBJW-9LcEW
-- **BTC:** bc1qdag98y5yahs6wf7rsfeh4cadsjfzmn5ngpjrcf
-- **SOL:** EwXXR4VqmWSNz1sjhZ8qcQ882i4URwAwhixSPEbDzyv6
-- **SUI:** 0x76da9b74c61508fbbd0b3e1989446e036b0622f252dd8d07c3fce759b239b47d
-
-🙏 感谢您的支持！
 
 ## 先决条件
 

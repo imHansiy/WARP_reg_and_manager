@@ -51,7 +51,7 @@ except AttributeError:
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout,
                              QWidget, QPushButton, QTableWidget, QTableWidgetItem,
                              QLabel, QMessageBox, QHeaderView, QTextEdit, QLineEdit, QComboBox,
-                             QProgressDialog, QAbstractItemView, QStatusBar, QMenu, QAction, QScrollArea)
+                             QProgressDialog, QAbstractItemView, QStatusBar, QMenu, QAction, QScrollArea, QDialog)
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer, QObject
 from PyQt5.QtGui import QFont
 import html
@@ -315,12 +315,6 @@ class MainWindow(QMainWindow):
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
 
-        # Add Ruwis link to right corner
-        self.ruwis_label = QLabel('<a href="https://github.com/D3-vin" style="color: #89b4fa; text-decoration: none; font-weight: bold;">https://github.com/D3-vin</a>')
-        self.ruwis_label.setOpenExternalLinks(True)
-        self.ruwis_label.setStyleSheet("QLabel { padding: 2px 8px; }")
-        self.status_bar.addPermanentWidget(self.ruwis_label)
-
         # Default status message
         debug_mode = os.path.exists("debug.txt")
         if debug_mode:
@@ -354,6 +348,12 @@ class MainWindow(QMainWindow):
         self.proxy_stop_button.clicked.connect(self.stop_proxy)
         self.proxy_stop_button.setVisible(False)  # Initially hidden
 
+        # One-click start button
+        self.one_click_button = QPushButton(_('one_click_start'))
+        self.one_click_button.setObjectName("OneClickStartButton")
+        self.one_click_button.setMinimumHeight(36)
+        self.one_click_button.clicked.connect(self.one_click_start)
+
         # Other buttons
         self.add_account_button = QPushButton(_('add_account'))
         self.add_account_button.setObjectName("AddButton")
@@ -367,17 +367,11 @@ class MainWindow(QMainWindow):
 
         # Removed auto-add account UI
 
+        button_layout.addWidget(self.one_click_button)
         button_layout.addWidget(self.proxy_stop_button)
         button_layout.addWidget(self.add_account_button)
         button_layout.addWidget(self.refresh_limits_button)
         button_layout.addStretch()
-
-        # Help button on the right
-        self.help_button = QPushButton('Help')
-        self.help_button.setFixedHeight(36)  # Compatible with modern button height
-        self.help_button.setToolTip("Help and User Guide")
-        self.help_button.clicked.connect(self.show_help_dialog)
-        button_layout.addWidget(self.help_button)
 
         layout.addLayout(button_layout)
 
@@ -425,7 +419,12 @@ class MainWindow(QMainWindow):
         self.log_level_combo.addItems(['ALL','INFO','WARN','ERROR','DEBUG'])
         self.log_level_combo.setCurrentText('ALL')
         self.log_filter_edit = QLineEdit()
-        self.log_filter_edit.setPlaceholderText('Filter text...')
+        self.log_filter_edit.setPlaceholderText('warp.dev')
+        # Default filter to warp.dev
+        try:
+            self.log_filter_edit.setText('warp.dev')
+        except Exception:
+            pass
         self.log_copy_btn = QPushButton('Copy')
         self.log_clear_btn = QPushButton('Clear')
         self.log_copy_btn.clicked.connect(self._copy_logs)
@@ -549,54 +548,11 @@ class MainWindow(QMainWindow):
         active_account = self.account_manager.get_active_account()
 
         for row, (email, account_json, health_status, limit_info) in enumerate(accounts):
-            # Activation button (Column 0) - Dark theme compatible
-            activation_button = QPushButton()
-            activation_button.setObjectName("activationButton")
-            # Size and style for readability
-            activation_button.setMinimumWidth(84)
-            activation_button.setFixedHeight(28)
-            activation_button.setStyleSheet("padding: 4px 10px; margin: 0; font-size: 12px; min-height: 24px; max-height: 28px;")
-            
-            # Set button state
-            is_active = (email == active_account)
-            is_banned = (health_status == _('status_banned_key'))
-
-            if is_banned:
-                activation_button.setText(_('button_banned'))
-                activation_button.setProperty("state", "banned")
-                activation_button.setEnabled(False)
-            elif is_active:
-                activation_button.setText(_('button_stop'))
-                activation_button.setProperty("state", "stop")
-            else:
-                activation_button.setText(_('button_start'))
-                activation_button.setProperty("state", "start")
-
-            # Connect button click handler
-            activation_button.clicked.connect(lambda checked, e=email: self.toggle_account_activation(e))
-
-            # Center the button inside the cell using a container widget
-            container = QWidget()
-            from PyQt5.QtWidgets import QHBoxLayout
-            from PyQt5.QtWidgets import QSizePolicy
-            container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-            container_layout = QHBoxLayout(container)
-            container_layout.setContentsMargins(6, 0, 6, 0)  # small symmetric margins
-            container_layout.setSpacing(0)
-            container_layout.setAlignment(Qt.AlignCenter)
-            container_layout.addWidget(activation_button)
-            self.table.setCellWidget(row, 0, container)
-
-            # Ensure row height fits the button nicely
-            self.table.setRowHeight(row, 52)
-
-            # Force container to fill the entire cell width for perfect centering
-            try:
-                col_w = self.table.columnWidth(0)
-                container.setMinimumWidth(col_w)
-                container.setMaximumWidth(col_w)
-            except Exception:
-                pass
+            # Column 0: indicator (no per-row start button)
+            indicator = '●' if email == active_account else ''
+            indicator_item = QTableWidgetItem(indicator)
+            indicator_item.setTextAlignment(Qt.AlignCenter)
+            self.table.setItem(row, 0, indicator_item)
 
             # Email (Column 1)
             email_item = QTableWidgetItem(email)
@@ -604,8 +560,8 @@ class MainWindow(QMainWindow):
 
             # Status (Column 2)
             try:
-                # Banned account check
-                if health_status == _('status_banned_key'):
+                # Banned account check (support both key and localized)
+                if health_status in ('banned', _('status_banned_key'), _('status_banned')):
                     status = _('status_banned')
                 else:
                     account_data = json.loads(account_json)
@@ -637,7 +593,7 @@ class MainWindow(QMainWindow):
             self.table.setItem(row, 3, limit_item)
 
             # Set row CSS properties for dark theme compatibility
-            if health_status == 'banned':
+            if health_status in ('banned', _('status_banned_key'), _('status_banned')):
                 # Banned account
                 for col in range(1, 4):
                     item = self.table.item(row, col)
@@ -649,7 +605,7 @@ class MainWindow(QMainWindow):
                     item = self.table.item(row, col)
                     if item:
                         item.setData(Qt.UserRole, "active")
-            elif health_status == 'unhealthy':
+            elif health_status in ('unhealthy', _('status_unhealthy')):
                 # Unhealthy account
                 for col in range(1, 4):
                     item = self.table.item(row, col)
@@ -815,12 +771,41 @@ class MainWindow(QMainWindow):
 
         self.status_bar.showMessage(_('accounts_updated', len(results)), 3000)
 
+        # Continue with one-click flow if requested
+        if getattr(self, 'one_click_pending', False):
+            self.one_click_pending = False
+            # Select a usable account
+            selected = self._select_usable_account()
+            if not selected:
+                self.status_bar.showMessage('没有可用的账户', 5000)
+                try:
+                    self.one_click_button.setEnabled(True)
+                except Exception:
+                    pass
+                return
+            # If proxy is active, just activate; otherwise start and activate
+            if self.proxy_enabled:
+                self.activate_account(selected)
+                try:
+                    self.one_click_button.setEnabled(True)
+                except Exception:
+                    pass
+            else:
+                self.start_proxy_and_activate_account(selected)
+
     def refresh_error(self, error_message):
         """Update error"""
         self.progress_dialog.close()
         self.refresh_limits_button.setEnabled(True)
         self.add_account_button.setEnabled(True)
         self.status_bar.showMessage(f"{_('error')}: {error_message}", 5000)
+        # Reset one-click state if needed
+        if getattr(self, 'one_click_pending', False):
+            self.one_click_pending = False
+            try:
+                self.one_click_button.setEnabled(True)
+            except Exception:
+                pass
 
     def start_proxy_and_activate_account(self, email):
         """Start proxy and activate account using background thread"""
@@ -1003,6 +988,11 @@ class MainWindow(QMainWindow):
 
                 self.status_bar.showMessage(f"Proxy started: {proxy_url}", 5000)
                 print("Proxy successfully started!")
+                # Re-enable one-click button if present
+                try:
+                    self.one_click_button.setEnabled(True)
+                except Exception:
+                    pass
             else:
                 print("Failed to configure Windows proxy")
                 self.proxy_manager.stop()
@@ -1152,11 +1142,10 @@ class MainWindow(QMainWindow):
             active = self.account_manager.get_active_account()
             if active:
                 return
-            accounts = self.account_manager.get_accounts_with_health()
-            for email, _, health in accounts:
-                if health != 'banned':
-                    self.activate_account(email)
-                    break
+            # Prefer best usable account
+            selected = self._select_usable_account()
+            if selected:
+                self.activate_account(selected)
         except Exception:
             pass
 
@@ -2038,13 +2027,6 @@ class MainWindow(QMainWindow):
         if timeout > 0:
             self.status_reset_timer.start(timeout)
 
-    def show_help_dialog(self):
-        """Open Telegram for help"""
-        import webbrowser
-        webbrowser.open("https://t.me/D3vin_chat")
-
-
-
     def refresh_ui_texts(self):
         """Update UI texts to English"""
         # Window title
@@ -2053,19 +2035,21 @@ class MainWindow(QMainWindow):
         # Buttons
         self.proxy_start_button.setText('Start Proxy' if not self.proxy_enabled else 'Proxy Active')
         self.proxy_stop_button.setText('Stop Proxy')
+        try:
+            self.one_click_button.setText('One-Click Start')
+        except Exception:
+            pass
         self.add_account_button.setText('Add Account')
         self.refresh_limits_button.setText('Refresh Limits')
-        self.help_button.setText('Help')
-
         # Table headers
         self.table.setHorizontalHeaderLabels(['Current', 'Email', 'Status', 'Limit'])
 
         # Status bar
         debug_mode = os.path.exists("debug.txt")
         if debug_mode:
-            self.status_bar.showMessage('Enable proxy and click start button on accounts to begin usage. (Debug mode active)')
+            self.status_bar.showMessage('Click One-Click Start to refresh limits and activate a usable account. (Debug mode)')
         else:
-            self.status_bar.showMessage('Enable proxy and click start button on accounts to begin usage.')
+            self.status_bar.showMessage('Click One-Click Start to refresh limits and activate a usable account.')
 
         # Reload table
         self.load_accounts(preserve_limits=True)
@@ -2076,6 +2060,61 @@ class MainWindow(QMainWindow):
             self.stop_proxy()
 
         event.accept()
+
+    def _select_usable_account(self) -> Optional[str]:
+        """Pick a usable account (not banned; with remaining limit if known)."""
+        try:
+            accounts = self.account_manager.get_accounts_with_health_and_limits()
+            best_email = None
+            best_remaining = -1
+            fallback_email = None
+            for email, _json, health, limit_text in accounts:
+                # Skip banned accounts (handle multiple representations)
+                if health in ('banned', _('status_banned_key'), _('status_banned')):
+                    continue
+                # Remember first non-banned as fallback
+                if fallback_email is None:
+                    fallback_email = email
+                # Try to parse limit info "used/total"
+                remaining = None
+                try:
+                    if limit_text and isinstance(limit_text, str) and '/' in limit_text:
+                        parts = limit_text.split('/')
+                        used = int(parts[0].strip())
+                        total = int(parts[1].strip())
+                        if total > 0:
+                            remaining = max(0, total - used)
+                except Exception:
+                    remaining = None
+                # If remaining known and > 0, prefer max remaining
+                if remaining is not None and remaining > best_remaining:
+                    best_remaining = remaining
+                    best_email = email
+            # Prefer account with remaining > 0; else any fallback
+            if best_email:
+                return best_email
+            return fallback_email
+        except Exception:
+            return None
+
+    def one_click_start(self):
+        """One-click: refresh limits then start proxy and activate a usable account."""
+        try:
+            # Prevent re-entry
+            try:
+                self.one_click_button.setEnabled(False)
+            except Exception:
+                pass
+            # Mark flow and trigger refresh
+            self.one_click_pending = True
+            self.refresh_limits()
+        except Exception as e:
+            self.one_click_pending = False
+            try:
+                self.one_click_button.setEnabled(True)
+            except Exception:
+                pass
+            self.status_bar.showMessage(f"一键启动失败: {str(e)}", 5000)
 
 
 def main():

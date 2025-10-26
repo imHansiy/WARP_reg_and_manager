@@ -39,6 +39,7 @@ class LanguageManager:
                 'add_account': '手动添加账户',
                 'auto_add_account': '自动添加账户',
                 'refresh_limits': '刷新限制',
+                'one_click_start': '一键启动',
                 'auto_register': '浏览器自动注册',
                 'browser_auto_register': '浏览器自动注册',
                 'enter_email_for_registration': '请输入用于注册的邮箱地址:',
@@ -206,8 +207,8 @@ class LanguageManager:
                 'delete_account_confirm': 'Are you sure you want to delete account \'{}\' ?\\n\\nThis action cannot be undone!',
 
                 # Status bar messages
-                'default_status': '启用代理并点击账户上的启动按钮开始使用。',
-                'default_status_debug': '启用代理并点击账户上的启动按钮开始使用。（调试模式激活）',
+                'default_status': '点击“一键启动”将自动刷新限制并激活可用账户。',
+                'default_status_debug': '点击“一键启动”将自动刷新限制并激活可用账户。（调试模式）',
 
                 # Debug and console messages
                 'stylesheet_load_error': '加载样式表失败: {}',
