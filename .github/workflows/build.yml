@@ -44,12 +44,10 @@ jobs:
           pyinstaller `
             --noconfirm `
             --clean `
-            --onefile `
             --noconsole `
             --name WarpAccountManager `
             --paths src `
             --icon src/static/img/logo.ico `
-            --splash src/static/img/logo.png `
             --exclude-module playwright `
             --exclude-module playwright_stealth `
             --exclude-module curl_cffi `
@@ -66,12 +64,12 @@ jobs:
             --add-data "src/proxy/warp_proxy_script.py;src/proxy" `
             main.py
 
-      - name: Prepare artifact
+      - name: Prepare artifact (onedir)
         shell: pwsh
         run: |
-          $exe = "dist/WarpAccountManager.exe"
-          if (!(Test-Path $exe)) { throw "Executable not found: $exe" }
-          Compress-Archive -Path $exe -DestinationPath "WarpAccountManager-win64-min.zip"
+          $dir = "dist/WarpAccountManager"
+          if (!(Test-Path $dir)) { throw "Folder not found: $dir" }
+          Compress-Archive -Path "$dir/*" -DestinationPath "WarpAccountManager-win64-min.zip"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
