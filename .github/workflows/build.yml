@@ -40,6 +40,7 @@ jobs:
             --noconfirm `
             --clean `
             --onefile `
+            --noconsole `
             --name WarpAccountManager `
             --paths src `
             --exclude-module playwright `
@@ -47,6 +48,7 @@ jobs:
             --exclude-module curl_cffi `
             --exclude-module tests `
             --hidden-import psutil `
+            --add-data "src/ui/dark_theme.qss;src/ui" `
             --add-data "src/proxy/warp_proxy_script.py;src/proxy" `
             main.py
 

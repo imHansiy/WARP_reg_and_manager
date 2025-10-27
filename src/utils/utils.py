@@ -13,10 +13,20 @@ from src.config.languages import _
 def load_stylesheet(app):
     """Apply modern dark theme style"""
     try:
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        dark_theme_path = os.path.join(base_dir, "ui", "dark_theme.qss")
+        import sys
+        # Prefer PyInstaller runtime temp dir if frozen
+        if getattr(sys, 'frozen', False):
+            base_dir = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+        else:
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        # Try both src/ui and ui to be robust
+        candidates = [
+            os.path.join(base_dir, "src", "ui", "dark_theme.qss"),
+            os.path.join(base_dir, "ui", "dark_theme.qss"),
+        ]
+        dark_theme_path = next((p for p in candidates if os.path.exists(p)), None)
         
-        if os.path.exists(dark_theme_path):
+        if dark_theme_path and os.path.exists(dark_theme_path):
             with open(dark_theme_path, "r", encoding="utf-8") as f:
                 app.setStyleSheet(f.read())
             print("Dark theme loaded successfully")
@@ -47,6 +57,20 @@ def load_stylesheet(app):
                     background-color: #181825;
                     color: #cdd6f4;
                     border: 1px solid #45475a;
+                }
+                QHeaderView {
+                    background-color: #313244;
+                    color: #cdd6f4;
+                    border: none;
+                    font-weight: 600;
+                }
+                QHeaderView::section {
+                    background-color: #313244;
+                    color: #cdd6f4;
+                    padding: 8px 8px;
+                    border: none;
+                    border-right: 1px solid #45475a;
+                    border-bottom: 1px solid #45475a;
                 }
             """)
             print("Fallback dark theme loaded")
