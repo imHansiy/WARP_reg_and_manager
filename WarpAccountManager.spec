@@ -1,4 +1,8 @@
 # -*- mode: python ; coding: utf-8 -*-
+from PyInstaller.utils.hooks import collect_submodules
+
+hiddenimports = ['psutil', 'PyQt5.sip', 'src.core.warp_account_manager', 'src.utils.utils', 'src.config.languages']
+hiddenimports += collect_submodules('src')
 
 
 a = Analysis(
@@ -6,7 +10,7 @@ a = Analysis(
     pathex=['src'],
     binaries=[('D:/pojie/WARP_reg_and_manager/.venv/Lib/site-packages/PyQt5/Qt5/plugins\\platforms\\qwindows.dll', 'qt_plugins/platforms'), ('D:/pojie/WARP_reg_and_manager/.venv/Lib/site-packages/PyQt5/Qt5/plugins\\imageformats\\qico.dll', 'qt_plugins/imageformats'), ('D:/pojie/WARP_reg_and_manager/.venv/Lib/site-packages/PyQt5/Qt5/plugins\\imageformats\\qjpeg.dll', 'qt_plugins/imageformats')],
     datas=[('src/ui/dark_theme.qss', 'src/ui'), ('src/static/img/logo.png', 'src/static/img'), ('src/proxy/warp_proxy_script.py', 'src/proxy')],
-    hiddenimports=['psutil', 'PyQt5.sip', 'src.core.warp_account_manager', 'src.utils.utils', 'src.config.languages'],
+    hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

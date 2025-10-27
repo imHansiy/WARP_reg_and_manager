@@ -88,6 +88,7 @@ $pyiArgs += @(
   "--hidden-import", "src.core.warp_account_manager",
   "--hidden-import", "src.utils.utils",
   "--hidden-import", "src.config.languages",
+  "--collect-submodules", "src",
   "--exclude-module", "PyQt5.QtWebEngineWidgets",
   "--exclude-module", "PyQt5.QtWebEngineCore",
   "--exclude-module", "PyQt5.QtWebEngine",
