@@ -403,9 +403,12 @@ class MitmProxyManager:
             
         elif 'address already in use' in error_lower or 'port' in error_lower:
             print("🚫 Port Conflict:")
-            print("   Another process is using port 8080")
-            print("   Kill existing process or use different port")
-            print(f"   Check with: lsof -i :8080")
+            print(f"   Another process is using port {self.port}")
+            print("   Kill existing process or use a different port")
+            try:
+                print(f"   Check with: netstat -ano | findstr :{self.port}")
+            except Exception:
+                pass
             
         elif 'no module named' in error_lower or 'modulenotfounderror' in error_lower:
             print("📦 Missing Dependencies:")
@@ -417,6 +420,11 @@ class MitmProxyManager:
             print("   Install mitmproxy:")
             print("   pip3 install mitmproxy")
             print("   Or: brew install mitmproxy")
+
+        elif 'listen' in error_lower and 'address' in error_lower and 'refused' in error_lower:
+            print("🧱 Firewall/Permission:")
+            print("   Windows 防火墙可能拦截了监听端口，允许本程序的网络访问或以管理员运行。")
+            print("   也可设置环境变量 WARP_PROXY_FORBIDDEN_PORTS=""8080,3000,8000"" 避开常用端口。")
             
         elif 'certificate' in error_lower or 'ssl' in error_lower or 'tls' in error_lower:
             print("🔒 Certificate Issue:")
@@ -481,10 +489,34 @@ class MitmProxyManager:
 
     def _choose_available_port(self, preferred: int = None, parent_window=None) -> int:
         """Return an available TCP port, starting from preferred/base_port.
-        Auto-increments until a free port is found (wraps around >65535 to 1024)."""
+        - Skips developer-common ports (e.g. 8080) by default
+        - Honors env WARP_PROXY_FORBIDDEN_PORTS (comma-separated numbers)
+        - Wraps around when exceeding 65535 and finally falls back to an ephemeral free port.
+        """
+        # Build forbidden set: always skip 8080 unless explicitly requested via env override
+        forbidden = {8080}
+        try:
+            env_forbid = os.environ.get('WARP_PROXY_FORBIDDEN_PORTS', '')
+            for t in env_forbid.split(','):
+                t = t.strip()
+                if t.isdigit():
+                    forbidden.add(int(t))
+        except Exception:
+            pass
+        
         base = preferred or self.base_port
+        # If base is forbidden, move to next
+        if base in forbidden:
+            base = base + 1 if base < 65535 else 1024
         p = base
         for _ in range(2000):  # safety cap
+            if p in forbidden:
+                if parent_window:
+                    self._emit_log(parent_window, f"Port {p} is forbidden, trying {p+1}")
+                p += 1
+                if p > 65535:
+                    p = 1024
+                continue
             if not self.is_port_open('127.0.0.1', p):
                 if parent_window:
                     self._emit_log(parent_window, f"Using proxy port {p}")
@@ -495,6 +527,18 @@ class MitmProxyManager:
                 p += 1
                 if p > 65535:
                     p = 1024  # wrap to a safe low port range
+        # As a last resort, ask OS for an ephemeral free port (still avoid forbidden)
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(('127.0.0.1', 0))
+                ep = s.getsockname()[1]
+            if ep in forbidden:
+                ep = ep + 1 if ep < 65535 else 1024
+            if parent_window:
+                self._emit_log(parent_window, f"Using ephemeral proxy port {ep}")
+            return ep
+        except Exception:
+            pass
         # Fallback to base if somehow none found within attempts
         if parent_window:
             self._emit_log(parent_window, f"Fallback to base port {base}")

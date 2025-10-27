@@ -930,6 +930,14 @@ class MainWindow(QMainWindow):
                 QApplication.processEvents()
                 
                 # Configure proxy in background thread
+                # Always avoid 8080 in system proxy setup
+                try:
+                    if proxy_url.endswith(':8080'):
+                        host, _ = proxy_url.split(':')
+                        # Replace with selected dynamic port reflected in manager
+                        proxy_url = self.proxy_manager.get_proxy_url()
+                except Exception:
+                    pass
                 self.proxy_config_worker = ProxyConfigWorker(proxy_url)
                 self.proxy_config_worker.config_completed.connect(
                     lambda success: self._on_proxy_configured_with_account(success, proxy_url)
