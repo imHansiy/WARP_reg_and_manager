@@ -51,9 +51,10 @@ except AttributeError:
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout,
                              QWidget, QPushButton, QTableWidget, QTableWidgetItem,
                              QLabel, QMessageBox, QHeaderView, QTextEdit, QLineEdit, QComboBox,
-                             QProgressDialog, QAbstractItemView, QStatusBar, QMenu, QAction, QScrollArea, QDialog)
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer, QObject
-from PyQt5.QtGui import QFont
+                             QProgressDialog, QAbstractItemView, QStatusBar, QMenu, QAction, QScrollArea, QDialog,
+                             QSystemTrayIcon, QStyle, QCheckBox)
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer, QObject, QEvent, QSettings
+from PyQt5.QtGui import QFont, QIcon
 import html
 
 
@@ -460,6 +461,114 @@ class MainWindow(QMainWindow):
         self.proxy_logs = []  # list of (level, text)
 
         central_widget.setLayout(layout)
+
+        # Initialize system tray
+        try:
+            self.init_tray()
+        except Exception:
+            pass
+
+    def init_tray(self):
+        """Initialize system tray icon and menu"""
+        try:
+            if hasattr(self, 'tray_icon') and self.tray_icon is not None:
+                return
+            self.tray_icon = QSystemTrayIcon(self)
+            # Use window icon if available, otherwise a standard icon
+            icon = self.windowIcon()
+            if icon.isNull():
+                try:
+                    icon = self.style().standardIcon(QStyle.SP_ComputerIcon)
+                except Exception:
+                    icon = QIcon()
+            self.tray_icon.setIcon(icon)
+            self.tray_icon.setToolTip(_('app_title'))
+
+            # Context menu
+            menu = QMenu(self)
+            self._tray_action_show = QAction(_('tray_show'), self)
+            self._tray_action_show.triggered.connect(self.restore_from_tray)
+            self._tray_action_exit = QAction(_('tray_exit'), self)
+            self._tray_action_exit.triggered.connect(self.exit_application)
+            menu.addAction(self._tray_action_show)
+            menu.addSeparator()
+            menu.addAction(self._tray_action_exit)
+            self.tray_icon.setContextMenu(menu)
+
+            # Activate to restore
+            try:
+                self.tray_icon.activated.connect(self.on_tray_activated)
+            except Exception:
+                pass
+
+            self.tray_icon.show()
+        except Exception:
+            pass
+
+    def on_tray_activated(self, reason):
+        try:
+            if reason in (QSystemTrayIcon.Trigger, QSystemTrayIcon.DoubleClick):
+                self.restore_from_tray()
+        except Exception:
+            pass
+
+    def restore_from_tray(self):
+        try:
+            self.showNormal()
+            try:
+                self.activateWindow()
+                self.raise_()
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    def minimize_to_tray(self):
+        try:
+            self.hide()
+            # Show tip only once
+            try:
+                settings = QSettings('Warp', 'WarpAccountManager')
+                shown = str(settings.value('ui/tray_tip_shown', 'false')).lower() == 'true'
+                if not shown and hasattr(self, 'tray_icon') and self.tray_icon:
+                    try:
+                        self.tray_icon.showMessage(_('app_title'), _('tray_minimized_tip'), QSystemTrayIcon.Information, 3000)
+                    except Exception:
+                        pass
+                    settings.setValue('ui/tray_tip_shown', 'true')
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    def exit_application(self):
+        try:
+            if getattr(self, 'proxy_enabled', False):
+                try:
+                    self.stop_proxy()
+                except Exception:
+                    pass
+            try:
+                if hasattr(self, 'tray_icon') and self.tray_icon:
+                    self.tray_icon.hide()
+            except Exception:
+                pass
+            QApplication.instance().quit()
+        except Exception:
+            try:
+                QApplication.instance().quit()
+            except Exception:
+                pass
+
+    def changeEvent(self, event):
+        try:
+            if event and event.type() == QEvent.WindowStateChange:
+                if self.isMinimized():
+                    # Defer to ensure proper state change
+                    QTimer.singleShot(0, self.minimize_to_tray)
+        except Exception:
+            pass
+        super().changeEvent(event)
 
     def ensure_log_visible(self):
         try:
@@ -2107,11 +2216,69 @@ class MainWindow(QMainWindow):
         self.load_accounts(preserve_limits=True)
 
     def closeEvent(self, event):
-        """Clean up when application closes"""
-        if self.proxy_enabled:
-            self.stop_proxy()
+        """On close: ask to minimize to tray or exit (with remember option)."""
+        try:
+            settings = QSettings('Warp', 'WarpAccountManager')
+            pref = settings.value('behavior/close_action', '', type=str) or ''
 
-        event.accept()
+            if pref == 'minimize':
+                event.ignore()
+                self.minimize_to_tray()
+                return
+            elif pref == 'exit':
+                if self.proxy_enabled:
+                    try:
+                        self.stop_proxy()
+                    except Exception:
+                        pass
+                event.accept()
+                return
+
+            # Ask the user
+            box = QMessageBox(self)
+            box.setWindowTitle(_('confirm_minimize_to_tray_title'))
+            box.setText(_('confirm_minimize_to_tray_text'))
+            box.setIcon(QMessageBox.Question)
+            yes_btn = box.addButton(_('yes'), QMessageBox.YesRole)   # minimize to tray
+            no_btn = box.addButton(_('no'), QMessageBox.NoRole)      # exit
+            cancel_btn = box.addButton(_('cancel'), QMessageBox.RejectRole)
+            remember = QCheckBox(_('do_not_ask_again'), box)
+            try:
+                box.setCheckBox(remember)
+            except Exception:
+                # Older PyQt versions may not support setCheckBox on QMessageBox; fall back by adding info text.
+                pass
+            box.exec_()
+
+            clicked = box.clickedButton()
+            if clicked == yes_btn:
+                if remember.isChecked():
+                    settings.setValue('behavior/close_action', 'minimize')
+                event.ignore()
+                self.minimize_to_tray()
+                return
+            elif clicked == no_btn:
+                if remember.isChecked():
+                    settings.setValue('behavior/close_action', 'exit')
+                if self.proxy_enabled:
+                    try:
+                        self.stop_proxy()
+                    except Exception:
+                        pass
+                event.accept()
+                return
+            else:
+                # Cancel
+                event.ignore()
+                return
+        except Exception:
+            # Fallback to original behavior
+            if self.proxy_enabled:
+                try:
+                    self.stop_proxy()
+                except Exception:
+                    pass
+            event.accept()
 
     def on_clipboard_changed(self):
         """Qt clipboard change signal handler."""
@@ -2346,6 +2513,14 @@ class MainWindow(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
+    # Identify app for QSettings
+    try:
+        app.setOrganizationName('Warp')
+        app.setApplicationName('WarpAccountManager')
+        # Keep running when window is hidden to tray
+        app.setQuitOnLastWindowClosed(False)
+    except Exception:
+        pass
     # Application style: modern and compact
     load_stylesheet(app)
 

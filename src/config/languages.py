@@ -32,6 +32,14 @@ class LanguageManager:
                 'warning': '警告',
                 'info': '信息',
 
+                # Tray and close behavior
+                'tray_show': '显示主界面',
+                'tray_exit': '退出',
+                'tray_minimized_tip': '程序已最小化到系统托盘，点击托盘图标可恢复。',
+                'confirm_minimize_to_tray_title': '最小化到托盘',
+                'confirm_minimize_to_tray_text': '是否最小化到系统托盘而不是退出？',
+                'do_not_ask_again': '不再询问',
+
                 # Buttons
                 'proxy_start': '启动代理',
                 'proxy_stop': '停止代理',
