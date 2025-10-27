@@ -4,12 +4,9 @@
 import sys
 import json
 import webbrowser
-import requests
 import time
 import subprocess
 import os
-import psutil
-import urllib3
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Optional
@@ -17,15 +14,11 @@ from pathlib import Path
 from src.config.languages import get_language_manager, _
 from src.managers.database_manager import DatabaseManager
 
-# OS-specific proxy managers
-from src.proxy.proxy_windows import WindowsProxyManager
-from src.proxy.proxy_macos import MacOSProxyManager
-from src.proxy.proxy_linux import LinuxProxyManager
+# OS-specific proxy managers (import by platform)
 
 # Modular components
 from src.managers.certificate_manager import CertificateManager, ManualCertificateDialog
 from src.workers.background_workers import TokenWorker, TokenRefreshWorker
-from src.managers.mitmproxy_manager import MitmProxyManager
 from src.ui.ui_dialogs import AddAccountDialog
 from src.utils.utils import load_stylesheet, get_os_info, is_port_open
 from src.utils.account_processor import AccountProcessor
@@ -39,7 +32,11 @@ else:
     from src.proxy.proxy_linux import LinuxProxyManager
 
 # Disable SSL warnings (when using mitmproxy)
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+try:
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+except Exception:
+    pass
 
 # SSL verification bypass - complete SSL verification disable
 import ssl
@@ -51,9 +48,10 @@ except AttributeError:
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout,
                              QWidget, QPushButton, QTableWidget, QTableWidgetItem,
                              QLabel, QMessageBox, QHeaderView, QTextEdit, QLineEdit, QComboBox,
-                             QProgressDialog, QAbstractItemView, QStatusBar, QMenu, QAction, QScrollArea, QDialog)
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer, QObject
-from PyQt5.QtGui import QFont
+                             QProgressDialog, QAbstractItemView, QStatusBar, QMenu, QAction, QScrollArea, QDialog,
+                             QSystemTrayIcon)
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer, QObject, QEvent
+from PyQt5.QtGui import QFont, QIcon
 import html
 
 
@@ -263,7 +261,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.account_manager = DatabaseManager()
-        self.proxy_manager = MitmProxyManager()
+        self.proxy_manager = None  # Lazy init for faster startup
         self.proxy_enabled = False
 
         # If proxy is disabled, clear active account
@@ -273,25 +271,29 @@ class MainWindow(QMainWindow):
         self.init_ui()
         self.load_accounts()
 
-        # Timer for checking proxy status
+        # System tray
+        self._exit_requested = False
+        self._setup_tray()
+
+        # Timer for checking proxy status (start delayed to speed up first paint)
         self.proxy_timer = QTimer()
         self.proxy_timer.timeout.connect(self.check_proxy_status)
-        self.proxy_timer.start(5000)  # Check every 5 seconds
+        QTimer.singleShot(1500, lambda: self.proxy_timer.start(5000))
 
-        # Timer for checking ban notifications
+        # Timer for checking ban notifications (start delayed)
         self.ban_timer = QTimer()
         self.ban_timer.timeout.connect(self.check_ban_notifications)
-        self.ban_timer.start(1000)  # Check every 1 second
+        QTimer.singleShot(2000, lambda: self.ban_timer.start(1000))
 
-        # Timer for automatic token renewal
+        # Timer for automatic token renewal (initialized but start later)
         self.token_renewal_timer = QTimer()
         self.token_renewal_timer.timeout.connect(self.auto_renew_tokens)
-        self.token_renewal_timer.start(60000)  # Check every 1 minute (60000 ms)
+        QTimer.singleShot(5000, lambda: self.token_renewal_timer.start(60000))  # delay first run
 
-        # Timer for active account refresh
+        # Timer for active account refresh (only active when proxy is enabled)
         self.active_account_refresh_timer = QTimer()
         self.active_account_refresh_timer.timeout.connect(self.refresh_active_account)
-        self.active_account_refresh_timer.start(60000)  # Refresh active account every 60 seconds
+        # Do not start here; it will be started when proxy is enabled
 
         # Timer for status message reset
         self.status_reset_timer = QTimer()
@@ -307,8 +309,8 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
-        # Run token check immediately on first startup
-        QTimer.singleShot(0, self.auto_renew_tokens)
+        # Do not run token check at startup to avoid slow launch
+        # QTimer.singleShot(0, self.auto_renew_tokens)
 
         # Variables for token worker
         self.token_worker = None
@@ -464,6 +466,58 @@ class MainWindow(QMainWindow):
     def ensure_log_visible(self):
         try:
             self.log_text.setFocus()
+        except Exception:
+            pass
+
+    def _setup_tray(self):
+        try:
+            if not QSystemTrayIcon.isSystemTrayAvailable():
+                self.tray = None
+                return
+            icon_path = None
+            try:
+                icon_path = _resolve_icon_path()
+            except Exception:
+                icon_path = None
+            tray_icon = QIcon(icon_path) if icon_path else self.windowIcon()
+            self.tray = QSystemTrayIcon(tray_icon, self)
+            self.tray.setToolTip('Warp Account Manager')
+
+            menu = QMenu(self)
+            act_show = QAction('显示主窗口', self)
+            act_quit = QAction('退出', self)
+            act_show.triggered.connect(self._restore_from_tray)
+            def _quit():
+                self._exit_requested = True
+                # Ensure window is shown to trigger proper close sequence if hidden
+                try:
+                    self.showNormal()
+                except Exception:
+                    pass
+                self.close()
+            act_quit.triggered.connect(_quit)
+            menu.addAction(act_show)
+            menu.addSeparator()
+            menu.addAction(act_quit)
+            self.tray.setContextMenu(menu)
+
+            self.tray.activated.connect(self._on_tray_activated)
+            self.tray.show()
+        except Exception:
+            self.tray = None
+
+    def _on_tray_activated(self, reason):
+        try:
+            if reason in (QSystemTrayIcon.Trigger, QSystemTrayIcon.DoubleClick):
+                self._restore_from_tray()
+        except Exception:
+            pass
+
+    def _restore_from_tray(self):
+        try:
+            self.show()
+            self.raise_()
+            self.activateWindow()
         except Exception:
             pass
 
@@ -826,10 +880,19 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
+    def _ensure_proxy_manager(self):
+        try:
+            if self.proxy_manager is None:
+                from src.managers.mitmproxy_manager import MitmProxyManager
+                self.proxy_manager = MitmProxyManager()
+        except Exception as e:
+            raise e
+
     def start_proxy_and_activate_account(self, email):
         """Start proxy and activate account using background thread"""
         try:
-            # Start Mitmproxy
+            # Lazy init Mitmproxy manager
+            self._ensure_proxy_manager()
             print(f"Starting proxy and activating {email}...")
 
             # Show progress dialog
@@ -953,6 +1016,8 @@ class MainWindow(QMainWindow):
     def start_proxy(self):
         """Start proxy using background thread"""
         try:
+            # Lazy init Mitmproxy manager
+            self._ensure_proxy_manager()
             print("Starting proxy...")
 
             # Show progress dialog
@@ -1722,6 +1787,20 @@ class MainWindow(QMainWindow):
             print(f"Token update error: {e}")
             return False
 
+    def changeEvent(self, event):
+        try:
+            if event.type() == QEvent.WindowStateChange:
+                if self.isMinimized() and QSystemTrayIcon.isSystemTrayAvailable():
+                    QTimer.singleShot(0, self.hide)
+                    try:
+                        if hasattr(self, 'tray') and self.tray:
+                            self.tray.showMessage('Warp Account Manager', '已最小化到系统托盘。', QSystemTrayIcon.Information, 2000)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        super().changeEvent(event)
+
     def check_proxy_status(self):
         """Check proxy status"""
         if self.proxy_enabled:
@@ -2108,10 +2187,37 @@ class MainWindow(QMainWindow):
         self.load_accounts(preserve_limits=True)
 
     def closeEvent(self, event):
-        """Clean up when application closes"""
+        """On close: ask to hide to system tray, or exit."""
+        try:
+            if getattr(self, '_exit_requested', False):
+                # Real quit path
+                if self.proxy_enabled:
+                    self.stop_proxy()
+                event.accept()
+                return
+
+            if QSystemTrayIcon.isSystemTrayAvailable() and hasattr(self, 'tray') and self.tray is not None:
+                reply = QMessageBox.question(
+                    self,
+                    "隐藏到托盘",
+                    "是否隐藏到系统托盘继续运行？\n选择“是”将最小化到托盘，选择“否”将直接退出。",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.Yes
+                )
+                if reply == QMessageBox.Yes:
+                    event.ignore()
+                    self.hide()
+                    try:
+                        self.tray.showMessage("Warp Account Manager", "已最小化到系统托盘。", QSystemTrayIcon.Information, 3000)
+                    except Exception:
+                        pass
+                    return
+        except Exception:
+            pass
+
+        # Default: exit
         if self.proxy_enabled:
             self.stop_proxy()
-
         event.accept()
 
     def on_clipboard_changed(self):
@@ -2263,6 +2369,7 @@ class MainWindow(QMainWindow):
                 return
             # Avoid launching if already running
             try:
+                import psutil
                 for p in psutil.process_iter(['name']):
                     if (p.info.get('name') or '').lower() == 'warp.exe':
                         return
@@ -2345,12 +2452,75 @@ class MainWindow(QMainWindow):
             self.status_bar.showMessage(f"一键启动失败: {str(e)}", 5000)
 
 
+def _resolve_icon_path():
+    try:
+        bases = []
+        import sys as _sys, os as _os
+        if getattr(_sys, 'frozen', False):
+            bases.append(getattr(_sys, '_MEIPASS', _os.path.dirname(_sys.executable)))
+            bases.append(_os.path.dirname(_sys.executable))
+        else:
+            bases.append(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))  # project root
+        candidates = []
+        for b in bases:
+            candidates.append(_os.path.join(b, 'src', 'static', 'img', 'logo.ico'))
+            candidates.append(_os.path.join(b, 'src', 'static', 'img', 'logo.png'))
+            candidates.append(_os.path.join(b, 'static', 'img', 'logo.ico'))
+            candidates.append(_os.path.join(b, 'static', 'img', 'logo.png'))
+        for p in candidates:
+            if os.path.exists(p):
+                return p
+    except Exception:
+        return None
+    return None
+
+
+def _set_qt_plugin_path():
+    try:
+        bases = []
+        if getattr(sys, 'frozen', False):
+            base = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+            bases = [base, os.path.dirname(sys.executable)]
+        else:
+            base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            bases = [base]
+        for b in bases:
+            candidate = os.path.join(b, 'PyQt5', 'Qt', 'plugins')
+            if os.path.isdir(candidate):
+                os.environ.setdefault('QT_PLUGIN_PATH', candidate)
+                plat = os.path.join(candidate, 'platforms')
+                if os.path.isdir(plat):
+                    os.environ.setdefault('QT_QPA_PLATFORM_PLUGIN_PATH', plat)
+                break
+    except Exception:
+        pass
+
+
 def main():
+    # Set minimal Qt plugin path to speed up load
+    _set_qt_plugin_path()
     app = QApplication(sys.argv)
+    # Set icon (global)
+    try:
+        from PyQt5.QtGui import QIcon
+        icon_path = _resolve_icon_path()
+        if icon_path:
+            app.setWindowIcon(QIcon(icon_path))
+    except Exception:
+        pass
+
     # Application style: modern and compact
     load_stylesheet(app)
 
     window = MainWindow()
+    try:
+        # Ensure window also has icon (inherit from app if not set)
+        if 'icon_path' in locals() and icon_path:
+            from PyQt5.QtGui import QIcon
+            window.setWindowIcon(QIcon(icon_path))
+    except Exception:
+        pass
+
     window.show()
     sys.exit(app.exec_())
 

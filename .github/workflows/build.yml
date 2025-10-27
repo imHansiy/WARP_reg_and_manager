@@ -28,10 +28,15 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install -r requirements.txt
-          python -m pip install pyinstaller pyinstaller-hooks-contrib
+          python -m pip install pyinstaller pyinstaller-hooks-contrib pillow
 
       - name: Install UPX (for maximum compression)
         run: choco install upx -y
+
+      - name: Make ICO (convert logo.png -> logo.ico)
+        shell: pwsh
+        run: |
+          python scripts/make_ico.py src/static/img/logo.png src/static/img/logo.ico
 
       - name: Build with PyInstaller (onefile, UPX compressed, lite)
         shell: pwsh
@@ -43,12 +48,15 @@ jobs:
             --noconsole `
             --name WarpAccountManager `
             --paths src `
+            --icon src/static/img/logo.ico `
             --exclude-module playwright `
             --exclude-module playwright_stealth `
             --exclude-module curl_cffi `
             --exclude-module tests `
             --hidden-import psutil `
+            --collect-all PyQt5 `
             --add-data "src/ui/dark_theme.qss;src/ui" `
+            --add-data "src/static/img/logo.png;src/static/img" `
             --add-data "src/proxy/warp_proxy_script.py;src/proxy" `
             main.py
 
