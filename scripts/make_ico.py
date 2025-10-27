@@ -11,7 +11,10 @@ def main():
     dst.parent.mkdir(parents=True, exist_ok=True)
     img = Image.open(src).convert("RGBA")
     sizes = [(16,16),(24,24),(32,32),(48,48),(64,64),(128,128),(256,256)]
-    img.save(str(dst), format="ICO", sizes=sizes)
+    # Ensure fully transparent canvas to avoid white matte
+    base = Image.new("RGBA", img.size, (0,0,0,0))
+    base.alpha_composite(img)
+    base.save(str(dst), format="ICO", sizes=sizes)
     print(f"ICO written: {dst}")
 
 if __name__ == "__main__":

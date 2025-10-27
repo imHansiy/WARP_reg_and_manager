@@ -49,9 +49,9 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout
                              QWidget, QPushButton, QTableWidget, QTableWidgetItem,
                              QLabel, QMessageBox, QHeaderView, QTextEdit, QLineEdit, QComboBox,
                              QProgressDialog, QAbstractItemView, QStatusBar, QMenu, QAction, QScrollArea, QDialog,
-                             QSystemTrayIcon)
+                             QSystemTrayIcon, QSplashScreen)
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer, QObject, QEvent
-from PyQt5.QtGui import QFont, QIcon
+from PyQt5.QtGui import QFont, QIcon, QPixmap, QColor
 import html
 
 
@@ -2463,10 +2463,11 @@ def _resolve_icon_path():
             bases.append(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))  # project root
         candidates = []
         for b in bases:
-            candidates.append(_os.path.join(b, 'src', 'static', 'img', 'logo.ico'))
+            # Prefer PNG for runtime (better alpha in taskbar)
             candidates.append(_os.path.join(b, 'src', 'static', 'img', 'logo.png'))
-            candidates.append(_os.path.join(b, 'static', 'img', 'logo.ico'))
             candidates.append(_os.path.join(b, 'static', 'img', 'logo.png'))
+            candidates.append(_os.path.join(b, 'src', 'static', 'img', 'logo.ico'))
+            candidates.append(_os.path.join(b, 'static', 'img', 'logo.ico'))
         for p in candidates:
             if os.path.exists(p):
                 return p
@@ -2484,6 +2485,16 @@ def _set_qt_plugin_path():
         else:
             base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             bases = [base]
+        # Prefer our minimal bundle qt_plugins
+        for b in bases:
+            candidate = os.path.join(b, 'qt_plugins')
+            if os.path.isdir(candidate):
+                os.environ['QT_PLUGIN_PATH'] = candidate
+                plat = os.path.join(candidate, 'platforms')
+                if os.path.isdir(plat):
+                    os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = plat
+                return
+        # Fallback to default bundled PyQt5 layout
         for b in bases:
             candidate = os.path.join(b, 'PyQt5', 'Qt', 'plugins')
             if os.path.isdir(candidate):
@@ -2491,7 +2502,7 @@ def _set_qt_plugin_path():
                 plat = os.path.join(candidate, 'platforms')
                 if os.path.isdir(plat):
                     os.environ.setdefault('QT_QPA_PLATFORM_PLUGIN_PATH', plat)
-                break
+                return
     except Exception:
         pass
 
@@ -2500,9 +2511,22 @@ def main():
     # Set minimal Qt plugin path to speed up load
     _set_qt_plugin_path()
     app = QApplication(sys.argv)
+
+    # Splash screen (initialization prompt)
+    splash = None
+    try:
+        pm = QPixmap(480, 240)
+        pm.fill(QColor("#1e1e2e"))
+        splash = QSplashScreen(pm)
+        splash.setWindowFlag(Qt.WindowStaysOnTopHint)
+        splash.showMessage("正在初始化，请稍候…", Qt.AlignHCenter | Qt.AlignVCenter, QColor("#cdd6f4"))
+        splash.show()
+        app.processEvents()
+    except Exception:
+        splash = None
+
     # Set icon (global)
     try:
-        from PyQt5.QtGui import QIcon
         icon_path = _resolve_icon_path()
         if icon_path:
             app.setWindowIcon(QIcon(icon_path))
@@ -2510,18 +2534,36 @@ def main():
         pass
 
     # Application style: modern and compact
+    try:
+        if splash:
+            splash.showMessage("正在加载界面主题…", Qt.AlignHCenter | Qt.AlignVCenter, QColor("#cdd6f4"))
+            app.processEvents()
+    except Exception:
+        pass
     load_stylesheet(app)
 
+    # Create main window
+    try:
+        if splash:
+            splash.showMessage("正在加载账户与组件…", Qt.AlignHCenter | Qt.AlignVCenter, QColor("#cdd6f4"))
+            app.processEvents()
+    except Exception:
+        pass
     window = MainWindow()
     try:
         # Ensure window also has icon (inherit from app if not set)
         if 'icon_path' in locals() and icon_path:
-            from PyQt5.QtGui import QIcon
             window.setWindowIcon(QIcon(icon_path))
     except Exception:
         pass
 
     window.show()
+    try:
+        if splash:
+            splash.finish(window)
+    except Exception:
+        pass
+
     sys.exit(app.exec_())
 
 

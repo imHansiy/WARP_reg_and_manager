@@ -2,14 +2,13 @@
 # -*- coding: utf-8 -*-
 
 """
-Warp Account Manager - Main Entry Point
-This is the entry point for the application after restructuring into packages.
+Warp Account Manager - Bootstrap Entry
+Shows splash immediately, then lazily imports the heavy UI module.
 """
 
 import sys
 import os
 import traceback
-from PyQt5.QtGui import QIcon
 
 # Force UTF-8 stdout/stderr to avoid Windows GBK encode errors with emojis
 try:
@@ -58,10 +57,83 @@ except Exception:
 # Add src directory to Python path
 sys.path.insert(0, os.path.join(_app_root(), 'src'))
 
-# Import and run the main application
-from src.core.warp_account_manager import main
+if __name__ == "__main__":
+    # Try to update PyInstaller bootloader splash (if enabled)
+    try:
+        import pyi_splash
+        pyi_splash.update_text("正在初始化…")
+    except Exception:
+        pass
 
-# Try set application icon
+    # Show minimal splash ASAP
+    from PyQt5.QtWidgets import QApplication, QSplashScreen
+    from PyQt5.QtGui import QPixmap, QColor
+    from PyQt5.QtCore import Qt
+
+    app = QApplication(sys.argv)
+
+    splash = None
+    try:
+        pm = QPixmap(480, 240)
+        pm.fill(QColor("#1e1e2e"))
+        splash = QSplashScreen(pm)
+        splash.setWindowFlag(Qt.WindowStaysOnTopHint)
+        splash.showMessage("正在初始化，请稍候…", Qt.AlignHCenter | Qt.AlignVCenter, QColor("#cdd6f4"))
+        splash.show()
+        app.processEvents()
+    except Exception:
+        splash = None
+
+    # Lazy import heavy modules after splash is visible
+    import importlib
+    try:
+        wam = importlib.import_module('src.core.warp_account_manager')
+        # Set plugin path before any heavy Qt loads
+        try:
+            if hasattr(wam, '_set_qt_plugin_path'):
+                wam._set_qt_plugin_path()
+        except Exception:
+            pass
+
+        # Apply stylesheet
+        try:
+            utils = importlib.import_module('src.utils.utils')
+            if splash:
+                splash.showMessage("正在加载界面主题…", Qt.AlignHCenter | Qt.AlignVCenter, QColor("#cdd6f4"))
+                app.processEvents()
+            utils.load_stylesheet(app)
+        except Exception:
+            pass
+
+        # Set icon
+        try:
+            if hasattr(wam, '_resolve_icon_path'):
+                from PyQt5.QtGui import QIcon
+                ip = wam._resolve_icon_path()
+                if ip:
+                    app.setWindowIcon(QIcon(ip))
+        except Exception:
+            pass
+
+        # Build and show main window
+        if splash:
+            splash.showMessage("正在加载账户与组件…", Qt.AlignHCenter | Qt.AlignVCenter, QColor("#cdd6f4"))
+            app.processEvents()
+        window = wam.MainWindow()
+        window.show()
+        # Close bootloader splash if present
+        try:
+            if 'pyi_splash' in sys.modules:
+                pyi_splash.close()
+        except Exception:
+            pass
+        if splash:
+            splash.finish(window)
+        sys.exit(app.exec_())
+    except Exception as e:
+        # Log and rethrow
+        _excepthook(type(e), e, e.__traceback__)
+        raise
 def _set_app_icon():
     try:
         # Candidates in packaged and source layouts

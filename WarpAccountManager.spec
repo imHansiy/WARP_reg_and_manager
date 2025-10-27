@@ -1,19 +1,12 @@
 # -*- mode: python ; coding: utf-8 -*-
-from PyInstaller.utils.hooks import collect_all
-
-datas = [('src/ui/dark_theme.qss', 'src/ui'), ('src/static/img/logo.png', 'src/static/img'), ('src/proxy/warp_proxy_script.py', 'src/proxy')]
-binaries = []
-hiddenimports = ['psutil']
-tmp_ret = collect_all('PyQt5')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
 
 a = Analysis(
     ['main.py'],
     pathex=['src'],
-    binaries=binaries,
-    datas=datas,
-    hiddenimports=hiddenimports,
+    binaries=[('D:/pojie/WARP_reg_and_manager/.venv/Lib/site-packages/PyQt5/Qt5/plugins\\platforms\\qwindows.dll', 'qt_plugins/platforms'), ('D:/pojie/WARP_reg_and_manager/.venv/Lib/site-packages/PyQt5/Qt5/plugins\\imageformats\\qico.dll', 'qt_plugins/imageformats'), ('D:/pojie/WARP_reg_and_manager/.venv/Lib/site-packages/PyQt5/Qt5/plugins\\imageformats\\qjpeg.dll', 'qt_plugins/imageformats')],
+    datas=[('src/ui/dark_theme.qss', 'src/ui'), ('src/static/img/logo.png', 'src/static/img'), ('src/proxy/warp_proxy_script.py', 'src/proxy')],
+    hiddenimports=['psutil', 'PyQt5.sip', 'src.core.warp_account_manager', 'src.utils.utils', 'src.config.languages'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -22,10 +15,20 @@ a = Analysis(
     optimize=0,
 )
 pyz = PYZ(a.pure)
+splash = Splash(
+    'src/static/img/logo.png',
+    binaries=a.binaries,
+    datas=a.datas,
+    text_pos=None,
+    text_size=12,
+    minify_script=True,
+    always_on_top=True,
+)
 
 exe = EXE(
     pyz,
     a.scripts,
+    splash,
     [],
     exclude_binaries=True,
     name='WarpAccountManager',
@@ -45,6 +48,7 @@ coll = COLLECT(
     exe,
     a.binaries,
     a.datas,
+    splash.binaries,
     strip=False,
     upx=True,
     upx_exclude=[],

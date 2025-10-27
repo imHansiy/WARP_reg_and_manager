@@ -84,7 +84,10 @@ $pyiArgs += @(
   "--exclude-module", "curl_cffi",
   "--exclude-module", "tests",
   "--hidden-import", "psutil",
-  "--collect-all", "PyQt5",
+  "--hidden-import", "PyQt5.sip",
+  "--hidden-import", "src.core.warp_account_manager",
+  "--hidden-import", "src.utils.utils",
+  "--hidden-import", "src.config.languages",
   "--exclude-module", "PyQt5.QtWebEngineWidgets",
   "--exclude-module", "PyQt5.QtWebEngineCore",
   "--exclude-module", "PyQt5.QtWebEngine",
@@ -103,6 +106,19 @@ $pyiArgs += @(
 )
 if (Test-Path $icoOut) { $pyiArgs += @("--icon", "src/static/img/logo.ico") }
 
+# Bootloader splash (appears before Python starts)
+$pyiArgs += @("--splash", "src/static/img/logo.png")
+
+# Detect minimal Qt plugin dlls and include only what we need
+$pluginJson = & $pythonCmd "scripts/find_qt_plugins.py"
+try { $pluginObj = $pluginJson | ConvertFrom-Json } catch { $pluginObj = $null }
+if ($pluginObj -and $pluginObj.platforms) {
+  foreach ($p in $pluginObj.platforms) { $pyiArgs += "--add-binary"; $pyiArgs += ("$p;qt_plugins/platforms") }
+}
+if ($pluginObj -and $pluginObj.imageformats) {
+  foreach ($p in $pluginObj.imageformats) { $pyiArgs += "--add-binary"; $pyiArgs += ("$p;qt_plugins/imageformats") }
+}
+
 # Entry
 $entry = "main.py"
 
@@ -115,6 +131,16 @@ if ($Mode -eq 'onedir') {
   $exe = Join-Path $Root ("dist/" + $Name + ".exe")
 }
 if (-not (Test-Path $exe)) { Fail "Build failed: not found $exe" }
+
+# UPX compress (if available) to reduce size
+if (Get-Command upx -ErrorAction SilentlyContinue) {
+  $targetDir = Join-Path $Root ("dist/" + $Name)
+  if (Test-Path $targetDir) {
+    Get-ChildItem -Path $targetDir -Recurse -Include *.pyd,*.dll |
+      Where-Object { $_.Name -notmatch 'python\d+\.dll|vcruntime|ucrtbase|api-ms-|msvcp|concrt' } |
+      ForEach-Object { try { upx --best --lzma --quiet $_.FullName } catch {} }
+  }
+}
 
 # Zip artifact
 $zip = Join-Path $Root "$Name-win64-min.zip"

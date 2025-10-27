@@ -7,3 +7,4 @@ accounts.db
 *.log
 dist/
 build/
+dist-nuitka/
