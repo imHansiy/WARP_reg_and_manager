@@ -49,11 +49,17 @@ jobs:
             --name WarpAccountManager `
             --paths src `
             --icon src/static/img/logo.ico `
+            --splash src/static/img/logo.png `
             --exclude-module playwright `
             --exclude-module playwright_stealth `
             --exclude-module curl_cffi `
             --exclude-module tests `
             --hidden-import psutil `
+            --hidden-import PyQt5.sip `
+            --hidden-import src.core.warp_account_manager `
+            --hidden-import src.utils.utils `
+            --hidden-import src.config.languages `
+            --collect-submodules src `
             --collect-all PyQt5 `
             --add-data "src/ui/dark_theme.qss;src/ui" `
             --add-data "src/static/img/logo.png;src/static/img" `
