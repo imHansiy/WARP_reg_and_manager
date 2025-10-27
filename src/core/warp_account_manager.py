@@ -933,7 +933,7 @@ class MainWindow(QMainWindow):
                 # Always avoid 8080 in system proxy setup
                 try:
                     if proxy_url.endswith(':8080'):
-                        host, _ = proxy_url.split(':')
+                        host, port_str = proxy_url.split(':', 1)
                         # Replace with selected dynamic port reflected in manager
                         proxy_url = self.proxy_manager.get_proxy_url()
                 except Exception:
